@@ -190,66 +190,72 @@ let links: NavBarLink[] = navBarConfig.links.map(
 <script>
 // 注意：主题切换由 LightDarkSwitch.svelte 的 toggleScheme 负责。
 // 这里不再重复监听 #scheme-switch，否则一次点击会被处理两次，表现为「点了没反应」。
-function loadButtonScript() {
-    document.addEventListener("click", (event) => {
-        if (!(event.target instanceof Element)) return;
-        const target = event.target;
 
-        const settingsButton = target.closest("#display-settings-switch");
-        if (settingsButton) {
-            event.stopPropagation();
-            document.getElementById("display-setting")?.classList.toggle("float-panel-closed");
-        }
+// swup 切换页面时会重新执行页面里的所有 <script>，如果这里不加守卫，
+// document 上的 click / scroll 监听器会一次次叠加：
+// 点一次「外观设置」被 toggle 两次（打开又关上），看起来就是按钮失灵。
+// 用 window 上的标记保证全局只绑定一次。
+const navbarBoundKey = "__fengzhanNavbarBound";
+if (!(window[navbarBoundKey])) {
+	window[navbarBoundKey] = true;
 
-        const menuButton = target.closest("#nav-menu-switch");
-        if (menuButton) {
-            event.stopPropagation();
-            document.getElementById("nav-menu-panel")?.classList.toggle("float-panel-closed");
-        }
+	document.addEventListener("click", (event) => {
+		if (!(event.target instanceof Element)) return;
+		const target = event.target;
 
-        if (target.closest("#nav-menu-panel a")) {
-            document.getElementById("nav-menu-panel")?.classList.add("float-panel-closed");
-        }
-        if (target.closest("#search-panel a")) {
-            document.getElementById("search-panel")?.classList.add("float-panel-closed");
-        }
-    });
+		const settingsButton = target.closest("#display-settings-switch");
+		if (settingsButton) {
+			event.stopPropagation();
+			document.getElementById("display-setting")?.classList.toggle("float-panel-closed");
+		}
+
+		const menuButton = target.closest("#nav-menu-switch");
+		if (menuButton) {
+			event.stopPropagation();
+			document.getElementById("nav-menu-panel")?.classList.toggle("float-panel-closed");
+		}
+
+		if (target.closest("#nav-menu-panel a")) {
+			document.getElementById("nav-menu-panel")?.classList.add("float-panel-closed");
+		}
+		if (target.closest("#search-panel a")) {
+			document.getElementById("search-panel")?.classList.add("float-panel-closed");
+		}
+	});
+
+	function updateNavbarScrollState() {
+		const navbar = document.getElementById("navbar");
+		if (!navbar) return;
+		// 取最可靠的滚动值：部分浏览器在旋转后会重置 window.scrollY，
+		// 但 documentElement / body 上仍保留真实位置。
+		const y = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+		navbar.classList.toggle("navbar-scrolled", y > 32);
+	}
+
+	updateNavbarScrollState();
+	window.addEventListener("scroll", updateNavbarScrollState, { passive: true });
+	document.addEventListener("scroll", updateNavbarScrollState, { passive: true });
+
+	// 旋转屏幕 / 改变窗口尺寸后，滚动位置可能被浏览器钳制或恢复，
+	// 却没有触发 scroll 事件，导致顶栏停留在「合并式」而回不到「分离式」。
+	// 这里在 resize 与 orientationchange 后主动重算一次。
+	window.addEventListener("resize", updateNavbarScrollState, { passive: true });
+	window.addEventListener("orientationchange", () => {
+		updateNavbarScrollState();
+		setTimeout(updateNavbarScrollState, 120);
+		setTimeout(updateNavbarScrollState, 400);
+	}, { passive: true });
+
+	// 旋转时收起所有浮层，避免手机端的搜索面板在横屏下继续悬浮遮挡页面。
+	function closeFloatingPanels() {
+		document.querySelectorAll(".float-panel").forEach((panel) => {
+			panel.classList.add("float-panel-closed");
+		});
+	}
+	window.addEventListener("orientationchange", () => {
+		closeFloatingPanels();
+	}, { passive: true });
 }
-
-loadButtonScript();
-
-function updateNavbarScrollState() {
-    const navbar = document.getElementById("navbar");
-    if (!navbar) return;
-    // 取最可靠的滚动值：部分浏览器在旋转后会重置 window.scrollY，
-    // 但 documentElement / body 上仍保留真实位置。
-    const y = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
-    navbar.classList.toggle("navbar-scrolled", y > 32);
-}
-
-updateNavbarScrollState();
-window.addEventListener("scroll", updateNavbarScrollState, { passive: true });
-document.addEventListener("scroll", updateNavbarScrollState, { passive: true });
-
-// 旋转屏幕 / 改变窗口尺寸后，滚动位置可能被浏览器钳制或恢复，
-// 却没有触发 scroll 事件，导致顶栏停留在「合并式」而回不到「分离式」。
-// 这里在 resize 与 orientationchange 后主动重算一次。
-window.addEventListener("resize", updateNavbarScrollState, { passive: true });
-window.addEventListener("orientationchange", () => {
-    updateNavbarScrollState();
-    setTimeout(updateNavbarScrollState, 120);
-    setTimeout(updateNavbarScrollState, 400);
-}, { passive: true });
-
-// 旋转时收起所有浮层，避免手机端的搜索面板在横屏下继续悬浮遮挡页面。
-function closeFloatingPanels() {
-    document.querySelectorAll(".float-panel").forEach((panel) => {
-        panel.classList.add("float-panel-closed");
-    });
-}
-window.addEventListener("orientationchange", () => {
-    closeFloatingPanels();
-}, { passive: true });
 </script>
 
 {import.meta.env.PROD && <script is:inline define:vars={{scriptUrl: url('/pagefind/pagefind.js')}}>
