@@ -13,7 +13,7 @@ import "@fontsource/roboto/700.css";
 		<link rel="icon" href="/images/avatar.svg" type="image/svg+xml" />
 		<title>博客后台管理</title>
 	</head>
-	<body class="admin-page">
+	<body class="admin-page" data-no-swup>
 		<main class="admin-shell">
 			<header class="admin-header">
 				<a class="admin-brand" href="/" aria-label="返回博客首页">
@@ -149,7 +149,7 @@ import "@fontsource/roboto/700.css";
 					<button class="admin-primary-button" type="submit">登录后台 <span aria-hidden="true">→</span></button>
 				</form>
 				${error ? `<p class="admin-error">${escapeHtml(error)}</p>` : ""}
-				<p class="admin-auth-hint">部署后可使用 Cloudflare Access 保护 <code>/admin</code>，密码登录用于本地测试和备用访问。</p>
+				<p class="admin-auth-hint">这里是私有编辑区，访客看不到。</p>
 			</section>`;
 		}
 
@@ -159,12 +159,12 @@ import "@fontsource/roboto/700.css";
 
 		private moduleDescription() {
 			return this.module === "music"
-				? "\u7f16\u8f91\u6b4c\u5355\u4fe1\u606f\uff1b\u97f3\u9891\u6587\u4ef6\u4ecd\u9700\u653e\u5165 public/audio/\u3002"
+				? "\u7f16\u8f91\u6b4c\u5355\u3002"
 				: this.module === "honors"
-					? "\u7ef4\u62a4\u5173\u4e8e\u9875\u9762\u7684\u8363\u8a89\u8bb0\u5f55\uff0c\u6bcf\u9879\u8bb0\u5f55\u4f7f\u7528\u4e00\u6bb5 Markdown\u3002"
+					? "\u7ef4\u62a4\u9875\u9762\u4e0a\u7684\u8363\u8a89\u8bb0\u5f55\u3002"
 					: this.module === "friends"
-						? "\u7f16\u8f91\u597d\u53cb\u7684\u7f51\u7ad9\u540d\u79f0\u3001\u4e3b\u9875\u3001\u5934\u50cf\u548c\u7b80\u4ecb\u3002"
-						: "\u4fee\u6539\u7559\u8a00\u677f\u6807\u9898\u3001\u8bf4\u660e\u548c Twikoo \u670d\u52a1\u5730\u5740\u3002";
+						? "\u7f16\u8f91\u597d\u53cb\u7684\u4fe1\u606f\u3002"
+						: "\u4fee\u6539\u7559\u8a00\u677f\u7684\u6807\u9898\u4e0e\u8bf4\u660e\u3002";
 		}
 
 		private contentSidebar() {
@@ -244,12 +244,12 @@ import "@fontsource/roboto/700.css";
 			if (!editor || !this.module) return;
 			const source = this.dataSource === "\u6b63\u5728\u8bfb\u53d6\u914d\u7f6e\u2026" ? "" : this.dataSource;
 			const helper = this.module === "music"
-				? "\u6bcf\u9996\u6b4c\u66f2\u4f7f\u7528\u4e00\u6bb5 --- \u5305\u8d77\u6765\u3002url \u5fc5\u987b\u5bf9\u5e94 public/audio/ \u91cc\u7684\u6587\u4ef6\u3002"
+				? "\u6bcf\u9996\u6b4c\u66f2\u4f7f\u7528\u4e00\u6bb5 --- \u5305\u8d77\u6765\u3002"
 				: this.module === "honors"
 					? "\u6bcf\u9879\u8363\u8a89\u4f7f\u7528\u4e00\u6bb5 --- \u5305\u8d77\u6765\uff0c\u53ef\u586b\u5199 date\u3001name\u3001issuer\u3001award\u3002"
 					: this.module === "friends"
 						? "\u6bcf\u4e2a\u597d\u53cb\u4f7f\u7528\u4e00\u6bb5 --- \u5305\u8d77\u6765\uff0c\u586b\u5199 name\u3001url\u3001avatar \u548c description\u3002"
-						: "envId \u586b\u5199 Twikoo \u670d\u52a1\u5730\u5740\uff1btitle \u548c description \u4f1a\u663e\u793a\u5728\u7559\u8a00\u677f\u9876\u90e8\u3002\u7ba1\u7406\u73b0\u6709\u7559\u8a00\u8bf7\u4f7f\u7528 Twikoo \u7ba1\u7406\u9762\u677f\u3002";
+						: "envId \u586b\u5199\u7559\u8a00\u677f\u670d\u52a1\u5730\u5740\uff1btitle \u548c description \u4f1a\u663e\u793a\u5728\u7559\u8a00\u677f\u9876\u90e8\u3002";
 			const guestbookAdminLink = this.module === "guestbook"
 				? `<a class="admin-secondary-button admin-admin-link" href="/guestbook/?admin=1" target="_blank" rel="noopener noreferrer">\u7ba1\u7406\u73b0\u6709\u7559\u8a00 \u2197</a>`
 				: "";
@@ -261,9 +261,9 @@ import "@fontsource/roboto/700.css";
 			${error ? `<p class="admin-notice">${escapeHtml(error)}</p>` : ""}
 			<div class="admin-module-editor">
 				<div class="admin-module-heading"><div class="admin-module-heading-icon">${icon(this.module)}</div><div><p class="admin-eyebrow">${this.module.toUpperCase()} SETTINGS</p><h2>${this.moduleTitle()}</h2><p>${helper}</p></div></div>
-				${this.module === "music" ? `<div class="admin-audio-upload"><label><span>\u4e0a\u4f20\u672c\u5730\u97f3\u9891</span><input type="file" accept="audio/*,.mp3,.m4a,.ogg,.wav,.flac,.aac" data-audio-file /></label><button class="admin-secondary-button" data-module-action="upload" type="button">\u4e0a\u4f20\u5e76\u6dfb\u52a0</button><small data-upload-status>\u6587\u4ef6\u5c06\u63d0\u4ea4\u5230 public/audio/</small></div>` : ""}
+				${this.module === "music" ? `<div class="admin-audio-upload"><label><span>\u4e0a\u4f20\u672c\u5730\u97f3\u9891</span><input type="file" accept="audio/*,.mp3,.m4a,.ogg,.wav,.flac,.aac" data-audio-file /></label><button class="admin-secondary-button" data-module-action="upload" type="button">\u4e0a\u4f20\u5e76\u6dfb\u52a0</button><small data-upload-status>\u5c06\u6587\u4ef6\u63d0\u4ea4\u5230\u8f93\u5165\u76ee\u5f55</small></div>` : ""}
 				<label class="admin-module-source-label">\u914d\u7f6e\u5185\u5bb9<textarea class="admin-module-source" data-module-source spellcheck="false" aria-label="${this.moduleTitle()}\u914d\u7f6e">${escapeHtml(source)}</textarea></label>
-				<div class="admin-module-tip"><strong>\u4fdd\u5b58\u524d\u68c0\u67e5</strong><span>${this.module === "music" ? "\u97f3\u9891\u6587\u4ef6\u9700\u8981\u5148\u653e\u5165 public/audio/\uff0c\u8fd9\u91cc\u53ea\u7f16\u8f91\u6b4c\u66f2\u540d\u79f0\u3001\u6b4c\u624b\u548c\u8def\u5f84\u3002" : this.module === "honors" ? "\u4fdd\u5b58\u540e\u5173\u4e8e\u9875\u9762\u4f1a\u81ea\u52a8\u8bfb\u53d6\u5e76\u5206\u9875\u663e\u793a\uff0c\u6bcf\u9875\u6700\u591a 5 \u9879\u3002" : this.module === "friends" ? "url \u4f7f\u7528 http(s) \u7f51\u5740\uff1bavatar \u53ef\u4ee5\u662f /images/ \u4e0b\u7684\u672c\u5730\u56fe\u7247\u6216 https \u56fe\u7247\u5730\u5740\u3002" : "\u7559\u8a00\u5185\u5bb9\u4f7f\u7528 Twikoo \u4fdd\u5b58\u3002\u70b9\u51fb\u53f3\u4e0a\u65b9\u201c\u7ba1\u7406\u73b0\u6709\u7559\u8a00\u201d\uff0c\u767b\u5f55 Twikoo \u7ba1\u7406\u5bc6\u7801\u540e\u53ef\u9690\u85cf\u3001\u663e\u793a\u3001\u5220\u9664\u3001\u7f16\u8f91\u548c\u7f6e\u9876\u3002"}</span></div>
+				<div class="admin-module-tip"><strong>\u4fdd\u5b58\u524d\u68c0\u67e5</strong><span>${this.module === "music" ? "\u8fd9\u91cc\u53ea\u7f16\u8f91\u6b4c\u66f2\u540d\u79f0\u3001\u6b4c\u624b\u548c\u6587\u4ef6\u8def\u5f84\u3002" : this.module === "honors" ? "\u4fdd\u5b58\u540e\u5173\u4e8e\u9875\u9762\u4f1a\u81ea\u52a8\u8bfb\u53d6\u5e76\u5206\u9875\u663e\u793a\uff0c\u6bcf\u9875\u6700\u591a 5 \u9879\u3002" : this.module === "friends" ? "url \u4f7f\u7528 http(s) \u7f51\u5740\uff1bavatar \u53ef\u4ee5\u662f /images/ \u4e0b\u7684\u672c\u5730\u56fe\u7247\u6216 https \u56fe\u7247\u5730\u5740\u3002" : "\u7559\u8a00\u5185\u5bb9\u4fdd\u5b58\u540e\u5373\u53ef\u751f\u6548\u3002"}</span></div>
 			</div>`;
 		}
 
@@ -687,13 +687,13 @@ import "@fontsource/roboto/700.css";
 	.admin-error { margin: .8rem 0 0; color: #b04141; font-size: .72rem; line-height: 1.5; }
 	.admin-auth-hint { margin: 1rem 0 0; padding-top: .85rem; border-top: 1px dashed #dbe3e6; font-size: .68rem; }
 	.admin-auth-hint code { color: #1a4676; }
-	.admin-workspace { display: grid; grid-template-columns: 4.5rem 20rem minmax(0, 1fr); min-height: 52rem; overflow: hidden; border: 1px solid #d9e1e5; border-radius: 1.35rem; background: #ffffffed; box-shadow: 0 1.25rem 3.5rem #54656d1a; }
+	.admin-workspace { display: grid; grid-template-columns: 4.5rem 20rem minmax(0, 1fr); height: clamp(34rem, calc(100vh - 8.5rem), 60rem); overflow: hidden; border: 1px solid #d9e1e5; border-radius: 1.35rem; background: #ffffffed; box-shadow: 0 1.25rem 3.5rem #54656d1a; }
 	.admin-rail { display: flex; flex-direction: column; align-items: center; gap: .65rem; padding: 1rem .7rem; border-right: 1px solid #e4eaec; background: #fff; }
 	.admin-rail-button { display: grid; place-items: center; width: 2.75rem; aspect-ratio: 1; border: 0; border-radius: .8rem; color: #9aa8ae; background: transparent; font-size: 1.15rem; text-decoration: none; transition: color 160ms ease, background 160ms ease, transform 160ms ease; }
 	.admin-rail-button:hover { color: #3a72ac; background: #e9f0f8; transform: translateY(-1px); }
 	.admin-rail-button.is-active { color: #2f6ba8; background: #e2eaf4; box-shadow: inset 0 0 0 1px #c6d6ea; }
 	.admin-rail-spacer { flex: 1; }
-	.admin-sidebar { display: flex; min-width: 0; flex-direction: column; padding: 1.5rem; border-right: 1px solid #e4eaec; background: linear-gradient(180deg, #f9fbfc 0%, #f3f7f8 100%); }
+	.admin-sidebar { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; padding: 1.5rem; border-right: 1px solid #e4eaec; background: linear-gradient(180deg, #f9fbfc 0%, #f3f7f8 100%); }
 	.admin-side-intro h1 { font-size: 1.35rem; letter-spacing: -.02em; }
 	.admin-side-intro p { margin: 0; }
 	.admin-side-title { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-top: .45rem; }
@@ -706,7 +706,7 @@ import "@fontsource/roboto/700.css";
 	.admin-tab.is-active { color: #1a4676; background: #fff; box-shadow: 0 .2rem .6rem #54656d12; }
 	.admin-list-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: .6rem; color: #53646c; font-size: .72rem; font-weight: 800; }
 	.admin-new-button { width: 2.25rem; min-height: 2.25rem; padding: 0; border: 1px dashed #b7c6d8; border-radius: .7rem; color: #1a4676; background: #f6f9fc; font-size: 1.1rem; }
-	.admin-list { display: grid; align-content: start; gap: .35rem; flex: 1; overflow: auto; min-height: 12rem; padding-right: .25rem; }
+	.admin-list { display: grid; align-content: start; gap: .35rem; flex: 1 1 0; overflow: auto; min-height: 0; padding-right: .25rem; }
 	.admin-list-item { display: grid; grid-template-columns: 1.9rem minmax(0, 1fr) auto; align-items: center; gap: .55rem; width: 100%; padding: .65rem .55rem; border: 1px solid transparent; border-radius: .7rem; color: inherit; background: transparent; text-align: left; }
 	.admin-list-item:hover, .admin-list-item.is-selected { border-color: #c2cfdd; background: #fff; }
 	.admin-list-item-icon { display: grid; place-items: center; width: 1.75rem; aspect-ratio: 1; border-radius: .55rem; color: #1d4f82; background: #e2eaf3; font-size: .85rem; }
@@ -724,12 +724,12 @@ import "@fontsource/roboto/700.css";
 	.admin-module-side-icon svg { width: 1.1rem; height: 1.1rem; }
 	.admin-sidebar-footer button { margin-left: auto; border: 0; color: #5f7285; background: transparent; font-size: .62rem; }
 	.admin-status-dot { width: .4rem; aspect-ratio: 1; border-radius: 50%; background: #6fc18e; box-shadow: 0 0 0 .2rem #6fc18e22; }
-	.admin-editor { min-width: 0; background: #fff; }
+	.admin-editor { min-width: 0; min-height: 0; overflow: auto; background: #fff; }
 	.admin-editor-empty { display: grid; place-items: center; align-content: center; min-height: 36rem; color: #829197; text-align: center; }
 	.admin-editor-empty h2 { margin-bottom: .35rem; font-size: 1.2rem; }
 	.admin-editor-empty p { margin: 0 0 1rem; font-size: .75rem; }
 	.admin-editor-empty .admin-primary-button { margin-top: 1rem; }
-	.admin-editor-topbar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 1rem; min-height: 4.75rem; padding: .75rem 1.5rem; border-bottom: 1px solid #e9eef0; background: #fff; }
+	.admin-editor-topbar { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 1rem; min-height: 4.75rem; padding: .75rem 1.5rem; border-bottom: 1px solid #e9eef0; background: #fff; }
 	.admin-back-button { display: inline-flex; align-items: center; gap: .25rem; width: fit-content; padding: .4rem; border: 0; color: #62717a; background: transparent; font-size: .82rem; font-weight: 600; }
 	.admin-back-button:hover { color: #4c9bd6; }
 	.admin-back-button svg { width: 1.1rem; height: 1.1rem; }
@@ -799,13 +799,14 @@ import "@fontsource/roboto/700.css";
 	@media (max-width: 780px) {
 		.admin-shell { width: min(100% - 1rem, 44rem); padding-top: .5rem; }
 		/* grid 项默认 min-width:auto，会被图标按钮撑破容器，这里必须用 minmax(0,1fr) */
-		.admin-workspace { grid-template-columns: minmax(0, 1fr); }
+		.admin-workspace { grid-template-columns: minmax(0, 1fr); height: auto; }
 		.admin-rail { flex-direction: row; justify-content: flex-start; gap: .3rem; padding: .65rem .8rem; border-right: 0; border-bottom: 1px solid #e4eaec; overflow-x: auto; overscroll-behavior-x: contain; }
 		.admin-rail-button { flex: 0 0 auto; width: 2.3rem; }
 		.admin-rail-spacer { flex: 1 1 0; min-width: 0; }
-		.admin-sidebar { min-width: 0; border-right: 0; border-bottom: 1px solid #e4eaec; }
-		.admin-list { max-height: 14rem; min-height: 0; }
-		.admin-editor-topbar { padding: .75rem 1rem; }
+		.admin-sidebar { min-width: 0; min-height: 0; overflow: visible; border-right: 0; border-bottom: 1px solid #e4eaec; }
+		.admin-list { flex: 0 0 auto; max-height: 13rem; min-height: 0; }
+		.admin-editor { min-height: 0; overflow: visible; }
+		.admin-editor-topbar { position: static; padding: .75rem 1rem; }
 		.admin-editor-form { padding: 1.5rem 1rem 3rem; }
 		.admin-body-input { min-height: 30rem; }
 		.admin-module-editor { padding: 1.5rem 1rem 3rem; }
