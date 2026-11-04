@@ -15,3 +15,9 @@ title: 宝船 - DOUDOU、燕云十六声
 artist: 未知歌手
 url: /audio/%E5%AE%9D%E8%88%B9%20-%20DOUDOU_%E7%87%95%E4%BA%91%E5%8D%81%E5%85%AD%E5%A3%B0.flac
 ---
+
+---
+title: 歌曲名称
+artist: 歌手名称
+url: /audio/song.mp3
+---
