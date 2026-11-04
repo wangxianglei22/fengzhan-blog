@@ -13,5 +13,5 @@ url: /audio/my-song.mp3
 ---
 title: 宝船
 artist: DOUDOU、燕云十六声
-url: /audio/%E5%AE%9D%E8%88%B9%20-%20DOUDOU_%E7%87%95%E4%BA%91%E5%8D%81%E5%85%AD%E5%A3%B0.flac
+url: /audio/%E5%AE%9D%E8%88%B9%20-%20DOUDOU_%E7%87%95%E4%BA%91%E5%8D%81%E5%85%AD%E5%A3%B0.mp3
 ---
