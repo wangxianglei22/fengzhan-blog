@@ -444,6 +444,23 @@ git push
 
 这里只向自己的博客仓库操作。若 `pull` 报冲突或工作区有未提交内容，先按第 13 节处理，不要强制覆盖。
 
+> **重要：后台改完文章后，站点不会立刻更新。** 后台保存文章是把内容提交到 GitHub（一次 commit），Cloudflare 再由这次 push 触发重新构建，通常需要 1–3 分钟。想立刻看到效果，就在 Deployments 页面点 **Retry deployment** 或 **Redeploy**。
+
+### 7.5 用命令行检查部署状态
+
+不想打开控制台时，可以用 wrangler 查询：
+
+```bash
+wrangler pages deployment list --project-name=YOUR_PROJECT_NAME
+wrangler pages project list
+```
+
+`wrangler pages deployment list` 会列出每次部署的 id、分支、提交号与状态，最新一条是 `Production` 即当前线上版本。
+
+> **注意：改动环境变量后必须重新部署才生效。** 在控制台改完变量不会自动重建站点，需要手动触发一次部署（Retry / Redeploy / 推空提交）。
+>
+> **Direct Upload 与 Git 集成不能互相转换。** 一个用 `wrangler pages deploy` 上传的项目，无法在控制台或 API 里切换成 Git 集成，反之亦然。想换方式只能新建项目。
+
 <a id="step-8"></a>
 
 ## 8. 填写正式网址与绑定域名
@@ -462,7 +479,7 @@ git push
 const siteUrl = (process.env.SITE_URL || "http://localhost:4321").replace(/\/+$/, "");
 ```
 
-部署时在 Cloudflare Pages 的环境变量里配置 `SITE_URL`，例如：
+**通常不用改这个文件。** 正式地址通过 Cloudflare Pages 的环境变量 `SITE_URL` 传入，构建时自动生效。例如：
 
 ```
 SITE_URL=https://fengzhan.pages.dev
@@ -472,7 +489,9 @@ SITE_URL=https://fengzhan.pages.dev
 
 这里只写站点来源地址，不填 `/admin/`，也不填 GitHub 仓库 URL。该配置影响规范链接、RSS 和站点地图，正式部署前必须填上自己的地址。
 
-提交并推送：
+改环境变量后需要触发一次重新部署（Retry / Redeploy）才生效。
+
+如果确实要写死进 `astro.config.mjs`（不推荐，域名会因此写死在代码里），改完记得提交并推送：
 
 ```powershell
 git add astro.config.mjs
