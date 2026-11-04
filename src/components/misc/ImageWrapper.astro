@@ -29,9 +29,14 @@ const isPublic = src.startsWith("/");
 // biome-ignore lint/suspicious/noImplicitAnyLet: <check later>
 let img;
 if (isLocal) {
-	const files = import.meta.glob<ImageMetadata>("../../**", {
-		import: "default",
-	});
+	// 只匹配图片扩展名。
+	// 早期这里写的是 "../../**"，会把 src/ 下所有文件（含全部 .astro 页面）
+	// 都拉进依赖图，导致每个页面的 CSS 都被串包进所有页面，
+	// 首页因此多出 diary/archive/about/friends 等无关样式（移动端首屏多传几百 KB）。
+	const files = import.meta.glob<ImageMetadata>(
+		"../../**/*.{png,jpg,jpeg,gif,svg,webp,avif,ico,bmp}",
+		{ import: "default" },
+	);
 	let normalizedPath = path
 		.normalize(path.join("../../", basePath, src))
 		.replace(/\\/g, "/");
