@@ -429,7 +429,7 @@ const { compact = false, tracks = [] } = Astro.props;
 			return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 		}
 
-		private showAudioError = () => this.showError("音频加载失败，请检查 public/audio/ 中的文件及音频格式。");
+		private showAudioError = () => this.showError("音频加载失败，请稍后重试或换一首试试。");
 		private showError(message: string) {
 			const error = this.querySelector<HTMLElement>("[data-error]");
 			if (error) {
