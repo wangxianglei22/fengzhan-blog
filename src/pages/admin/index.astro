@@ -798,10 +798,12 @@ import "@fontsource/roboto/700.css";
 	.is-busy { pointer-events: none; opacity: .72; }
 	@media (max-width: 780px) {
 		.admin-shell { width: min(100% - 1rem, 44rem); padding-top: .5rem; }
-		.admin-workspace { grid-template-columns: 1fr; }
-		.admin-rail { flex-direction: row; justify-content: flex-start; padding: .65rem .8rem; border-right: 0; border-bottom: 1px solid #e4eaec; }
-		.admin-rail-spacer { display: block; }
-		.admin-sidebar { border-right: 0; border-bottom: 1px solid #e4eaec; }
+		/* grid 项默认 min-width:auto，会被图标按钮撑破容器，这里必须用 minmax(0,1fr) */
+		.admin-workspace { grid-template-columns: minmax(0, 1fr); }
+		.admin-rail { flex-direction: row; justify-content: flex-start; gap: .3rem; padding: .65rem .8rem; border-right: 0; border-bottom: 1px solid #e4eaec; overflow-x: auto; overscroll-behavior-x: contain; }
+		.admin-rail-button { flex: 0 0 auto; width: 2.3rem; }
+		.admin-rail-spacer { flex: 1 1 0; min-width: 0; }
+		.admin-sidebar { min-width: 0; border-right: 0; border-bottom: 1px solid #e4eaec; }
 		.admin-list { max-height: 14rem; min-height: 0; }
 		.admin-editor-topbar { padding: .75rem 1rem; }
 		.admin-editor-form { padding: 1.5rem 1rem 3rem; }
