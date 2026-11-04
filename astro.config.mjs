@@ -24,9 +24,16 @@ import { remarkExcerpt } from "./src/plugins/remark-excerpt.js";
 import { remarkReadingTime } from "./src/plugins/remark-reading-time.mjs";
 import { pluginCustomCopyButton } from "./src/plugins/expressive-code/custom-copy-button.js";
 
-// 站点正式地址：优先读环境变量 SITE_URL；未设置时退回本地地址，
-// 不再内置任何示例域名。部署时在 Cloudflare Pages 配置 SITE_URL=https://你的域名。
-const siteUrl = (process.env.SITE_URL || "http://localhost:4321").replace(/\/+$/, "");
+// 站点正式地址：优先读环境变量 SITE_URL（部署到自有域名时在面板配置）；
+// 未配置时退回 Cloudflare Pages 构建时必定注入的 CF_PAGES_URL（值即 https://<项目名>.pages.dev）；
+// 本地开发才用 localhost。不再内置任何示例域名。
+// 注意：Pages 的「构建环境变量」和「运行时变量」是两套，Git 集成下前者只能在面板 Build 页面配置，
+// 因此这里用 CF_PAGES_URL 兜底，保证不配置也能生成正确的线上地址。
+const siteUrl = (
+	process.env.SITE_URL ||
+	process.env.CF_PAGES_URL ||
+	"http://localhost:4321"
+).replace(/\/+$/, "");
 
 // https://astro.build/config
 export default defineConfig({
