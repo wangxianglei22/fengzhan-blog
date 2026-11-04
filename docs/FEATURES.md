@@ -220,13 +220,14 @@ Cloudflare **不统计独立访客（unique visitors）、跳出率和停留时�
 
 | 项          | 位置                                      | 说明                          |
 | ---------- | --------------------------------------- | --------------------------- |
-| ⬜ 正式域名     | 环境变量 `SITE_URL`                         | 未设则生成 `localhost` 链接，部署前必须填 |
-| ⬜ 后台环境变量   | Cloudflare Pages                        | 7 个变量见「六」                   |
+| ✅ 线上地址 | `https://fengzhan-blog.pages.dev`         | 已上线，Git 集成自动部署          |
+| ⬜ 正式域名     | 环境变量 `SITE_URL`                         | 已配 `pages.dev` 地址；换自有域名时改这里 |
+| ⬜ 后台环境变量   | Cloudflare Pages                        | 6 个已配（ADMIN_PASSWORD / ADMIN_SESSION_SECRET / GITHUB_* 四项）；`ADMIN_EMAIL` 未配 |
 | ⬜ 社交图标     | `src/config.ts` → `profileConfig.links` | 空数组 → 导航区不显示社交按钮            |
-| ⬜ 留言板后端   | Cloudflare Pages + D1                   | 已集成 Twikoo，需 `wrangler login`、创建 D1 并填 `wrangler.toml` 的 `database_id` |
+| ✅ 留言板后端   | Cloudflare Pages + D1                   | Twikoo 已部署到 `/api/twikoo`，D1 绑定在 `wrangler.toml` |
 | ⬜ 歌单       | `src/data/music.md` + `public/audio/`   | 放入有权公开播放的音频                 |
 | ⬜ 友链 / 荣誉墙 | `src/data/friends.md` / `honors.md`     | 现为带格式说明的空模板                 |
 | ⬜ 横幅图      | `src/config.ts` → `banner.enable`       | 当前 false，文章页已用 `banner.svg` |
 | ⬜ 示例日记     | `src/content/diary/example-1..4.md`     | 内容可自行替换                     |
-| ⬜ 运行时长起点   | `src/config.ts` → `siteStartedAt`       | 当前 2026-11-04               |
+| ✅ 运行时长起点   | `src/config.ts` → `siteStartedAt`       | 2026-11-04                |
 | ⬜ 统计环境变量   | Cloudflare Pages                        | 4 个变量见「六」与「八」              |
