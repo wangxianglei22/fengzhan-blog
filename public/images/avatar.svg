@@ -11,13 +11,20 @@
 			<stop offset="1" stop-color="#b8813a" />
 		</linearGradient>
 	</defs>
+	<!-- 背景铺满整个方形，页面用 border-radius:50% 裁成圆形 -->
 	<rect width="512" height="512" rx="96" fill="url(#bg)" />
-	<circle cx="256" cy="248" r="192" fill="#ffffff" opacity=".045" />
-	<circle cx="256" cy="248" r="192" fill="none" stroke="#e3b96e" stroke-opacity=".3" stroke-width="4" />
-	<!-- 叶柄 -->
-	<path d="M248 296h16v104h-16z" fill="#b8813a" />
-	<!-- 枫叶主体 -->
-	<g transform="translate(0 -28)">
+	<!-- 装饰圆环，圆心与画布中心一致 -->
+	<circle cx="256" cy="256" r="192" fill="#ffffff" opacity=".045" />
+	<circle cx="256" cy="256" r="192" fill="none" stroke="#e3b96e" stroke-opacity=".3" stroke-width="4" />
+	<!--
+		枫叶与叶柄作为一个整体，整体垂直居中于 (256,256)。
+		叶片 y 58..300、叶柄 y 296..400（两者在 296..300 相接），
+		组合后跨度 58..400，中心 229，因此整体下移 27px。
+	-->
+	<g transform="translate(0 27)">
+		<!-- 叶柄 -->
+		<path d="M248 296h16v104h-16z" fill="#b8813a" />
+		<!-- 枫叶主体 -->
 		<path
 			d="M256 58C268 105 280 140 296 176L340 146 376 118 352 196 330 206 400 250 330 272 300 296 256 300 212 296 182 272 112 250 182 206 160 196 136 118 172 146 216 176C232 140 244 105 256 58Z"
 			fill="url(#leaf)"

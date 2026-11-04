@@ -1,5 +1,6 @@
 ---
 import ArchivePanel from "@components/ArchivePanel.astro";
+import BackHomeLink from "@components/BackHomeLink.astro";
 import MainGridLayout from "@layouts/MainGridLayout.astro";
 import { getSortedPostsList } from "../utils/content-utils";
 
@@ -10,6 +11,7 @@ const uncategorized = Astro.url.searchParams.get("uncategorized") === "true";
 ---
 
 <MainGridLayout title="文章总览">
+    <BackHomeLink />
     <ArchivePanel posts={sortedPostsList} {tags} {categories} {uncategorized}></ArchivePanel>
 </MainGridLayout>
 

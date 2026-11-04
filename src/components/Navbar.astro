@@ -123,7 +123,9 @@ let links: NavBarLink[] = navBarConfig.links.map(
     }
     .navbar-link:hover, .navbar-link:focus-visible { transform: translateY(-2px); color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
     .navbar-link:active { transform: scale(0.97); }
-    .navbar-tools { flex: 0 0 auto; gap: 0.1rem; min-height: 3.25rem; padding: 0.2rem 0.45rem; }
+    /* 浮层面板（搜索/外观设置/菜单）以本容器为定位基准，
+       否则会向上找到 #navbar-wrapper（fixed），在移动端被挤成窄条。 */
+    .navbar-tools { position: relative; flex: 0 0 auto; gap: 0.1rem; min-height: 3.25rem; padding: 0.2rem 0.45rem; }
     .navbar-tool {
         display: grid;
         place-items: center;

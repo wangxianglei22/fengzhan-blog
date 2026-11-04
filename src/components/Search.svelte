@@ -36,6 +36,18 @@ const togglePanel = () => {
 	panel?.classList.toggle("float-panel-closed");
 };
 
+// 清空关键词时必须同时清掉结果并收起面板，否则搜到的文章会一直留在面板里。
+// 这里直接读 input 的值，不依赖 bind:value 的更新时机。
+const clearResults = () => {
+	result = [];
+	document.getElementById("search-panel")?.classList.add("float-panel-closed");
+};
+
+const handleInput = (event: Event) => {
+	const value = (event.currentTarget as HTMLInputElement).value;
+	if (!value.trim()) clearResults();
+};
+
 const setPanelVisibility = (show: boolean, isDesktop: boolean): void => {
 	const panel = document.getElementById("search-panel");
 	if (!panel || !isDesktop) return;
@@ -48,12 +60,15 @@ const setPanelVisibility = (show: boolean, isDesktop: boolean): void => {
 };
 
 const search = async (keyword: string, isDesktop: boolean): Promise<void> => {
-	if (!keyword) {
-		setPanelVisibility(false, isDesktop);
+	if (!keyword.trim()) {
+		// 关键词被清空时必须同时清掉结果并收起面板，
+		// 否则搜到的文章会一直留在面板里。
 		result = [];
+		const panel = document.getElementById("search-panel");
+		panel?.classList.add("float-panel-closed");
+		setPanelVisibility(false, isDesktop);
 		return;
 	}
-
 	if (!initialized) {
 		return;
 	}
@@ -152,22 +167,22 @@ $: if (initialized && keywordMobile) {
 
 <!-- toggle btn for phone/tablet view -->
 <button on:click={togglePanel} aria-label="Search Panel" id="search-switch"
-        class="btn-plain scale-animation lg:!hidden rounded-full w-11 h-11 active:scale-90">
+        class="btn-plain scale-animation lg:!hidden rounded-full w-12 h-12 active:scale-90">
     <Icon icon="material-symbols:search" class="text-[1.25rem]"></Icon>
 </button>
 
 <!-- search panel -->
-<div id="search-panel" class="float-panel float-panel-closed search-panel absolute md:w-[30rem]
-top-20 left-4 md:left-[unset] right-4 shadow-2xl rounded-2xl p-2">
+<div id="search-panel" class="float-panel float-panel-closed search-panel absolute w-[min(30rem,calc(100vw-2rem))] md:w-[30rem]
+top-[4.6rem] right-4 md:right-auto md:left-[unset] shadow-2xl rounded-2xl p-2">
 
     <!-- search bar inside panel for phone/tablet -->
-    <div id="search-bar-inside" class="flex relative lg:hidden transition-all items-center h-11 rounded-full
+    <div id="search-bar-inside" class="flex relative lg:hidden transition-all items-center h-12 rounded-full
       bg-black/[0.04] hover:bg-black/[0.06] focus-within:bg-black/[0.06]
       dark:bg-white/5 dark:hover:bg-white/10 dark:focus-within:bg-white/10
   ">
-        <Icon icon="material-symbols:search" class="absolute text-[1.25rem] pointer-events-none ml-3 transition my-auto text-black/30 dark:text-white/30"></Icon>
-        <input placeholder="{i18n(I18nKey.search)}" bind:value={keywordMobile}
-               class="pl-10 absolute inset-0 text-sm bg-transparent outline-0
+        <Icon icon="material-symbols:search" class="absolute text-[1.35rem] pointer-events-none ml-3.5 transition my-auto text-black/30 dark:text-white/30"></Icon>
+        <input placeholder="{i18n(I18nKey.search)}" bind:value={keywordMobile} on:input={handleInput}
+               class="pl-11 absolute inset-0 text-base bg-transparent outline-0
                focus:w-60 text-black/50 dark:text-white/50"
         >
     </div>

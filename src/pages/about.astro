@@ -1,6 +1,7 @@
 ---
 import { getCollection } from "astro:content";
 import { Icon } from "astro-icon/components";
+import BackHomeLink from "@components/BackHomeLink.astro";
 import ImageWrapper from "@components/misc/ImageWrapper.astro";
 import MainGridLayout from "../layouts/MainGridLayout.astro";
 import { profileConfig } from "../config";
@@ -25,6 +26,7 @@ const honors = parseHonors(honorsSource);
 
 <MainGridLayout title={`关于 ${profileConfig.name}`} description={`${profileConfig.name} 的个人介绍`}>
     <div class="about-page">
+        <BackHomeLink />
         <section class="about-intro" aria-labelledby="about-title">
             <div class="about-portrait-column">
                 <div class="about-portrait-frame">
@@ -74,7 +76,6 @@ const honors = parseHonors(honorsSource);
                     <div class="interest-number">0{index + 1} <span>{item.label}</span></div>
                     <h3>{item.title}</h3>
                     <p>{item.text}</p>
-                    <Icon class="interest-arrow" name="material-symbols:arrow-forward-rounded" />
                 </article>)}
             </div>
         </section>
@@ -150,7 +151,6 @@ const honors = parseHonors(honorsSource);
     .interest-number span { margin-left: 0.25rem; color: color-mix(in srgb, var(--deep-text) 45%, transparent); }
     .interest-item h3 { margin: 0.3rem 0 0; color: var(--deep-text); font-size: 0.98rem; }
     .interest-item p { max-width: 28rem; margin: 0.35rem 1.2rem 0 0; color: color-mix(in srgb, var(--deep-text) 60%, transparent); font-size: 0.73rem; line-height: 1.55; }
-    .interest-arrow { position: absolute; right: 1rem; bottom: 1rem; width: 1rem; height: 1rem; color: color-mix(in srgb, var(--primary) 74%, transparent); }
     .interest-item.ink .interest-icon { color: oklch(0.40 0.10 255); background: oklch(0.945 0.025 255); }
     .interest-item.blue .interest-icon { color: oklch(0.48 0.10 215); background: oklch(0.945 0.025 215); }
     .interest-item.gold .interest-icon { color: oklch(0.62 0.13 72); background: oklch(0.95 0.035 72); }

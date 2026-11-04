@@ -12,6 +12,20 @@ import "@fontsource/roboto/700.css";
 		<meta name="robots" content="noindex,nofollow" />
 		<link rel="icon" href="/images/avatar.svg" type="image/svg+xml" />
 		<title>博客后台管理</title>
+		<script is:inline>
+			// 在首帧前定好深浅色，避免刷新时闪白。
+			(function () {
+				try {
+					var stored = localStorage.getItem("admin-theme");
+					var dark =
+						stored === "dark" ||
+						(stored !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+					if (dark) document.documentElement.classList.add("admin-dark");
+				} catch (error) {
+					/* localStorage 不可用时按浅色处理 */
+				}
+			})();
+		</script>
 	</head>
 	<body class="admin-page" data-no-swup>
 		<main class="admin-shell">
@@ -20,12 +34,53 @@ import "@fontsource/roboto/700.css";
 					<span class="admin-brand-mark"><svg viewBox="100 40 320 280" aria-hidden="true" focusable="false"><path d="M256 58C268 105 280 140 296 176L340 146 376 118 352 196 330 206 400 250 330 272 300 296 256 300 212 296 182 272 112 250 182 206 160 196 136 118 172 146 216 176C232 140 244 105 256 58Z" fill="currentColor" /></svg></span>
 					<span><strong>枫栈</strong><small>CONTENT STUDIO</small></span>
 				</a>
-				<a class="admin-back-link" href="/">返回博客 <span aria-hidden="true">↗</span></a>
+				<button class="admin-theme-toggle" type="button" data-action="toggle-theme"
+					aria-label="切换深浅色" title="切换深浅色">
+					<svg class="admin-theme-icon admin-theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2" /><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6" /></svg>
+					<svg class="admin-theme-icon admin-theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.6A8.9 8.9 0 0 1 9.4 3.5a8.9 8.9 0 1 0 11.1 11.1Z" /></svg>
+				</button>
 			</header>
 			<admin-app>
 				<div class="admin-loading">正在加载后台…</div>
 			</admin-app>
 		</main>
+		<script is:inline>
+			(function () {
+				var root = document.documentElement;
+				var media = window.matchMedia("(prefers-color-scheme: dark)");
+				var button = document.querySelector("[data-action=toggle-theme]");
+				if (!button) return;
+				var apply = function (theme) {
+					var dark = theme === "dark" || (theme !== "light" && media.matches);
+					root.classList.toggle("admin-dark", dark);
+					button.setAttribute("aria-pressed", dark ? "true" : "false");
+				};
+				var stored = null;
+				try {
+					stored = localStorage.getItem("admin-theme");
+				} catch (error) {
+					stored = null;
+				}
+				apply(stored || "auto");
+				button.addEventListener("click", function () {
+					var current = root.classList.contains("admin-dark") ? "dark" : "light";
+					var next = current === "dark" ? "light" : "dark";
+					try {
+						localStorage.setItem("admin-theme", next);
+					} catch (error) {
+						/* ignore */
+					}
+					apply(next);
+				});
+				media.addEventListener("change", function () {
+					try {
+						if (!localStorage.getItem("admin-theme")) apply("auto");
+					} catch (error) {
+						apply("auto");
+					}
+				});
+			})();
+		</script>
 	</body>
 </html>
 
@@ -183,7 +238,6 @@ import "@fontsource/roboto/700.css";
 		private renderWorkspace() {
 			this.innerHTML = `<section class="admin-workspace">
 				<aside class="admin-rail" aria-label="\u540e\u53f0\u5bfc\u822a">
-					<a class="admin-rail-button" href="/" aria-label="\u8fd4\u56de\u535a\u5ba2" title="\u8fd4\u56de\u535a\u5ba2">${icon("home")}</a>
 					<button class="admin-rail-button ${!this.module && this.kind === "posts" ? "is-active" : ""}" data-kind="posts" type="button" aria-label="\u6587\u7ae0" title="\u6587\u7ae0">${icon("posts")}</button>
 					<button class="admin-rail-button ${!this.module && this.kind === "diary" ? "is-active" : ""}" data-kind="diary" type="button" aria-label="\u65e5\u8bb0" title="\u65e5\u8bb0">${icon("diary")}</button>
 					<button class="admin-rail-button ${this.module === "music" ? "is-active" : ""}" data-module="music" type="button" aria-label="\u97f3\u4e50" title="\u97f3\u4e50">${icon("music")}</button>
@@ -647,9 +701,26 @@ import "@fontsource/roboto/700.css";
 	.admin-page { min-width: 320px; min-height: 100vh; margin: 0; }
 	.admin-page button, .admin-page input, .admin-page textarea { font: inherit; }
 	.admin-page button { cursor: pointer; }
+	.admin-theme-toggle {
+		display: grid;
+		place-items: center;
+		width: 2.4rem;
+		aspect-ratio: 1;
+		border: 1px solid color-mix(in srgb, var(--admin-line, #e4eaec) 100%, transparent);
+		border-radius: 50%;
+		color: #5f7285;
+		background: transparent;
+		transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+	}
+	.admin-theme-toggle:hover { color: #1d4f82; background: #e9f0f8; border-color: #c2cfdd; }
+	.admin-theme-toggle .admin-theme-icon { width: 1.15rem; height: 1.15rem; }
+	.admin-theme-icon-sun { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+	.admin-theme-icon-moon { display: none; fill: currentColor; stroke: none; }
+	.admin-dark .admin-theme-icon-sun { display: none; }
+	.admin-dark .admin-theme-icon-moon { display: block; }
 	.admin-shell { width: min(1440px, calc(100% - 3rem)); margin: 0 auto; padding: 1.5rem 0 2.5rem; }
 	.admin-header { display: flex; align-items: center; justify-content: space-between; min-height: 4.5rem; padding: 0 .15rem; }
-	.admin-brand, .admin-back-link { color: inherit; text-decoration: none; }
+	.admin-brand { color: inherit; text-decoration: none; }
 	.admin-brand { display: flex; align-items: center; gap: .7rem; }
 	.admin-brand-mark { display: grid; place-items: center; width: 2.3rem; aspect-ratio: 1; border-radius: .8rem; color: #e9bd68; background: #1d3a63; font-weight: 800; box-shadow: 0 .45rem 1.1rem #1d4f8244; }
 	.admin-brand-mark svg { width: 1.35rem; height: 1.35rem; }
@@ -657,8 +728,6 @@ import "@fontsource/roboto/700.css";
 	.admin-brand strong { font-size: .95rem; }
 	.admin-brand small, .admin-eyebrow { color: #5f7285; font-size: .62rem; font-weight: 800; letter-spacing: .14em; }
 	.admin-brand small { margin-top: .15rem; }
-	.admin-back-link { color: #66767f; font-size: .78rem; }
-	.admin-back-link:hover { color: #1d4f82; }
 	.admin-loading { display: grid; min-height: 28rem; place-items: center; color: #82919a; }
 	.admin-auth-panel { width: min(34rem, 100%); margin: 6rem auto 0; padding: 2.75rem; border: 1px solid #d9e1e5; border-radius: 1.35rem; background: #ffffffed; box-shadow: 0 1.25rem 3.5rem #54656d1a; }
 	.admin-auth-icon, .admin-empty-mark { display: grid; place-items: center; width: 3rem; aspect-ratio: 1; border-radius: 1rem; color: #1d4f82; background: #e2eaf3; }
@@ -825,36 +894,38 @@ import "@fontsource/roboto/700.css";
 		.admin-editor-topbar .admin-editor-actions button:not(.admin-icon-button), .admin-editor-topbar .admin-editor-actions .admin-admin-link { flex: 1; }
 		.admin-metadata summary { gap: .4rem; }
 	}
-	@media (prefers-color-scheme: dark) {
-		.admin-page { color-scheme: dark; background: radial-gradient(circle at 4% 0%, #31404a 0, #202a31 46%, #172027 100%); }
-		.admin-workspace, .admin-auth-panel { border-color: #43515a; background: #26323ad9; box-shadow: 0 1rem 3rem #111a1e55; }
-		.admin-rail { border-color: #3e4b53; background: #202a31; }
-		.admin-rail-button { color: #8fa0a8; }
-		.admin-rail-button:hover, .admin-rail-button.is-active { color: #8fbde8; background: #1c3550; }
-		.admin-sidebar { border-color: #3e4b53; background: #202a31; }
-		.admin-editor, .admin-editor-topbar { border-color: #40505a; background: #26323a; }
-		.admin-title-input, .admin-body-input { color: #edf2f3; }
-		.admin-title-input::placeholder, .admin-body-input::placeholder { color: #829198; }
-		.admin-metadata { border-color: #40505a; }
-		.admin-metadata summary { color: #bbcad0; }
-		.admin-metadata .admin-form-grid, .admin-markdown-toolbar { border-color: #40505a; background: #2d3941; }
-		.admin-markdown-toolbar button { color: #bbcad0; }
-		.admin-markdown-toolbar button:hover { color: #8fbde8; background: #1c3550; }
-		.admin-module-side-card, .admin-module-source { border-color: #40505a; background: #2d3941; }
-		.admin-module-heading p, .admin-module-sidebar-copy { color: #aab8bd; }
-		.admin-module-tip { border-color: #3f4d5e; background: #2a3441; }
-		.admin-audio-upload { border-color: #40505a; background: #2d3941; }
-		.admin-audio-upload input[type="file"] { border-color: #4c5c65; color: #bbcad0; background: #26323a; }
-		.admin-emoji-menu { border-color: #4c5c65; background: #2d3941; }
-		.admin-mood-input button { border-color: #4c5c65; background: #2a3441; }
-		.admin-auth-panel h1, .admin-editor h2, .admin-side-intro h1, .admin-list-item-copy strong { color: #edf2f3; }
-		.admin-muted, .admin-side-intro p, .admin-auth-hint, .admin-form-footer, .admin-list-empty, .admin-back-link { color: #aab8bd; }
-		.admin-tabs { background: #182229; }
-		.admin-tab.is-active, .admin-list-item:hover, .admin-list-item.is-selected, .admin-secondary-button, .admin-page input, .admin-page textarea { border-color: #4c5c65; background: #2d3941; color: #edf2f3; }
-		.admin-checkbox-field { border-color: #3f4d5e; background: #2a3441; }
-		.admin-checkbox-field strong { color: #edf2f3; }
-		.admin-checkbox-field small { color: #aab8bd; }
-		.admin-editor-head, .admin-form-footer { border-color: #40505a; }
-		.admin-page input::placeholder, .admin-page textarea::placeholder { color: #809098; }
-	}
+	/* 深色模式由 .admin-dark 类驱动（.admin-dark 加在 <html> 上），
+	   头部脚本会根据「后台主题偏好 / 系统偏好」决定是否添加这个类。 */
+	.admin-dark .admin-page { color-scheme: dark; background: radial-gradient(circle at 4% 0%, #31404a 0, #202a31 46%, #172027 100%); }
+	.admin-dark .admin-theme-toggle { color: #aab8bd; border-color: #40505a; }
+	.admin-dark .admin-theme-toggle:hover { color: #8fbde8; background: #1c3550; border-color: #4c5c65; }
+	.admin-dark .admin-workspace, .admin-auth-panel { border-color: #43515a; background: #26323ad9; box-shadow: 0 1rem 3rem #111a1e55; }
+	.admin-dark .admin-rail { border-color: #3e4b53; background: #202a31; }
+	.admin-dark .admin-rail-button { color: #8fa0a8; }
+	.admin-dark .admin-rail-button:hover, .admin-rail-button.is-active { color: #8fbde8; background: #1c3550; }
+	.admin-dark .admin-sidebar { border-color: #3e4b53; background: #202a31; }
+	.admin-dark .admin-editor, .admin-editor-topbar { border-color: #40505a; background: #26323a; }
+	.admin-dark .admin-title-input, .admin-body-input { color: #edf2f3; }
+	.admin-dark .admin-title-input::placeholder, .admin-body-input::placeholder { color: #829198; }
+	.admin-dark .admin-metadata { border-color: #40505a; }
+	.admin-dark .admin-metadata summary { color: #bbcad0; }
+	.admin-dark .admin-metadata .admin-form-grid, .admin-markdown-toolbar { border-color: #40505a; background: #2d3941; }
+	.admin-dark .admin-markdown-toolbar button { color: #bbcad0; }
+	.admin-dark .admin-markdown-toolbar button:hover { color: #8fbde8; background: #1c3550; }
+	.admin-dark .admin-module-side-card, .admin-module-source { border-color: #40505a; background: #2d3941; }
+	.admin-dark .admin-module-heading p, .admin-module-sidebar-copy { color: #aab8bd; }
+	.admin-dark .admin-module-tip { border-color: #3f4d5e; background: #2a3441; }
+	.admin-dark .admin-audio-upload { border-color: #40505a; background: #2d3941; }
+		.admin-dark .admin-audio-upload input[type="file"] { border-color: #4c5c65; color: #bbcad0; background: #26323a; }
+	.admin-dark .admin-emoji-menu { border-color: #4c5c65; background: #2d3941; }
+	.admin-dark .admin-mood-input button { border-color: #4c5c65; background: #2a3441; }
+	.admin-dark .admin-auth-panel h1, .admin-editor h2, .admin-side-intro h1, .admin-list-item-copy strong { color: #edf2f3; }
+	.admin-dark .admin-muted, .admin-side-intro p, .admin-auth-hint, .admin-form-footer, .admin-list-empty { color: #aab8bd; }
+	.admin-dark .admin-tabs { background: #182229; }
+	.admin-dark .admin-tab.is-active, .admin-list-item:hover, .admin-list-item.is-selected, .admin-secondary-button, .admin-page input, .admin-page textarea { border-color: #4c5c65; background: #2d3941; color: #edf2f3; }
+	.admin-dark .admin-checkbox-field { border-color: #3f4d5e; background: #2a3441; }
+	.admin-dark .admin-checkbox-field strong { color: #edf2f3; }
+	.admin-dark .admin-checkbox-field small { color: #aab8bd; }
+	.admin-dark .admin-editor-head, .admin-form-footer { border-color: #40505a; }
+	.admin-dark .admin-page input::placeholder, .admin-page textarea::placeholder { color: #809098; }
 </style>

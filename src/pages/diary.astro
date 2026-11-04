@@ -1,5 +1,6 @@
 ---
 import { getCollection } from "astro:content";
+import BackHomeLink from "../components/BackHomeLink.astro";
 import DiaryBoard from "../components/DiaryBoard.astro";
 import MainGridLayout from "../layouts/MainGridLayout.astro";
 
@@ -7,5 +8,6 @@ const entries = await getCollection("diary", ({ data }) => !data.draft && data.h
 ---
 
 <MainGridLayout title="日记" description="记录每天的心情和生活片段。">
+    <BackHomeLink />
     <DiaryBoard entries={entries} />
 </MainGridLayout>

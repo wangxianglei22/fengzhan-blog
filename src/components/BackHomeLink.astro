@@ -1,0 +1,52 @@
+---
+import { Icon } from "astro-icon/components";
+import { url } from "../utils/url-utils";
+
+interface Props {
+	/** 额外的定位类名，默认靠右显示在内容区顶部 */
+	class?: string;
+}
+
+const { class: className } = Astro.props;
+---
+
+<div class:list={["back-home-row", className]}>
+	<a class="back-home-link" href={url("/")} aria-label="返回首页">
+		<Icon name="material-symbols:arrow-back-rounded" />
+		<span>返回首页</span>
+	</a>
+</div>
+
+<style is:global>
+	.back-home-row {
+		display: flex;
+		justify-content: flex-end;
+		margin: 0 0 0.65rem;
+	}
+	.back-home-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.28rem 0.7rem;
+		border: 1px solid color-mix(in srgb, var(--deep-text) 12%, transparent);
+		border-radius: 999px;
+		color: color-mix(in srgb, var(--deep-text) 58%, transparent);
+		background: color-mix(in srgb, var(--card-bg) 55%, transparent);
+		font-size: 0.72rem;
+		text-decoration: none;
+		transition:
+			color 160ms ease,
+			border-color 160ms ease,
+			background 160ms ease;
+	}
+	.back-home-link:hover,
+	.back-home-link:focus-visible {
+		color: var(--primary);
+		border-color: color-mix(in srgb, var(--primary) 34%, transparent);
+		background: color-mix(in srgb, var(--primary) 8%, transparent);
+	}
+	.back-home-link :global(svg) {
+		width: 0.95rem;
+		height: 0.95rem;
+	}
+</style>
