@@ -36,7 +36,17 @@ export const onRequestPost = async ({ request, env }: Context) => {
 			}
 			const bytes = new Uint8Array(await file.arrayBuffer());
 			if (!bytes.length) return json({ error: "音频文件不能为空。" }, 400, corsHeaders);
-			if (bytes.byteLength > 30 * 1024 * 1024) return json({ error: "单个音频文件不能超过 30 MB。" }, 413, corsHeaders);
+			// Cloudflare Pages 单文件上限为 25 MiB，超出会在构建阶段被直接拒绝部署。
+			if (bytes.byteLength > 25 * 1024 * 1024) {
+				return json(
+					{
+						error:
+							"单个音频文件不能超过 25 MiB（Cloudflare Pages 的硬上限）。请先转成 MP3 或压缩后再上传。",
+					},
+					413,
+					corsHeaders,
+				);
+			}
 			await writeBinaryFile(env, `public/audio/${safeName}`, bytes, `上传音乐：${safeName}`);
 			return json({ uploaded: true, name: safeName, url: `/audio/${safeName.split("/").map(encodeURIComponent).join("/")}` }, 201, corsHeaders);
 		}
