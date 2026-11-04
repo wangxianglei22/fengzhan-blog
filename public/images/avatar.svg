@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="枫栈徽标">
+	<defs>
+		<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+			<stop stop-color="#1c2b47" />
+			<stop offset=".55" stop-color="#243757" />
+			<stop offset="1" stop-color="#16233c" />
+		</linearGradient>
+		<linearGradient id="leaf" x1=".2" y1="0" x2=".85" y2="1">
+			<stop stop-color="#ecc67f" />
+			<stop offset=".55" stop-color="#d9a548" />
+			<stop offset="1" stop-color="#b8813a" />
+		</linearGradient>
+	</defs>
+	<rect width="512" height="512" rx="96" fill="url(#bg)" />
+	<circle cx="256" cy="248" r="192" fill="#ffffff" opacity=".045" />
+	<circle cx="256" cy="248" r="192" fill="none" stroke="#e3b96e" stroke-opacity=".3" stroke-width="4" />
+	<!-- 叶柄 -->
+	<path d="M248 296h16v104h-16z" fill="#b8813a" />
+	<!-- 枫叶主体 -->
+	<g transform="translate(0 -28)">
+		<path
+			d="M256 58C268 105 280 140 296 176L340 146 376 118 352 196 330 206 400 250 330 272 300 296 256 300 212 296 182 272 112 250 182 206 160 196 136 118 172 146 216 176C232 140 244 105 256 58Z"
+			fill="url(#leaf)"
+		/>
+		<!-- 叶脉 -->
+		<g stroke="#1c2b47" stroke-opacity=".42" stroke-width="8" stroke-linecap="round" fill="none">
+			<path d="M256 296V72" />
+			<path d="M256 236 362 132" />
+			<path d="M256 236 150 132" />
+			<path d="M256 258 382 246" />
+			<path d="M256 258 130 246" />
+			<path d="M256 262 300 292" />
+			<path d="M256 262 212 292" />
+		</g>
+	</g>
+	<!-- 点缀 -->
+	<circle cx="98" cy="122" r="7" fill="#e3b96e" opacity=".7" />
+	<circle cx="416" cy="156" r="5" fill="#e3b96e" opacity=".5" />
+	<circle cx="118" cy="404" r="5" fill="#8fa8c4" opacity=".45" />
+	<circle cx="402" cy="398" r="8" fill="#8fa8c4" opacity=".35" />
+</svg>

@@ -1,0 +1,849 @@
+---
+import "@fontsource/roboto/400.css";
+import "@fontsource/roboto/500.css";
+import "@fontsource/roboto/700.css";
+---
+
+<!doctype html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="robots" content="noindex,nofollow" />
+		<link rel="icon" href="/images/avatar.svg" type="image/svg+xml" />
+		<title>博客后台管理</title>
+	</head>
+	<body class="admin-page">
+		<main class="admin-shell">
+			<header class="admin-header">
+				<a class="admin-brand" href="/" aria-label="返回博客首页">
+					<span class="admin-brand-mark"><svg viewBox="100 40 320 280" aria-hidden="true" focusable="false"><path d="M256 58C268 105 280 140 296 176L340 146 376 118 352 196 330 206 400 250 330 272 300 296 256 300 212 296 182 272 112 250 182 206 160 196 136 118 172 146 216 176C232 140 244 105 256 58Z" fill="currentColor" /></svg></span>
+					<span><strong>枫栈</strong><small>CONTENT STUDIO</small></span>
+				</a>
+				<a class="admin-back-link" href="/">返回博客 <span aria-hidden="true">↗</span></a>
+			</header>
+			<admin-app>
+				<div class="admin-loading">正在加载后台…</div>
+			</admin-app>
+		</main>
+	</body>
+</html>
+
+<script>
+	type CollectionName = "posts" | "diary";
+	type AdminModule = "music" | "honors" | "guestbook" | "friends";
+	type Entry = {
+		collection: CollectionName;
+		slug: string;
+		sha?: string;
+		title: string;
+		date: string;
+		updated: string;
+		draft: boolean;
+		hidden: boolean;
+		description: string;
+		image: string;
+		tags: string[];
+		category: string;
+		lang: string;
+		mood: string;
+		moodLabel: string;
+		excerpt: string;
+		cover: string;
+		pinned: boolean;
+		body: string;
+	};
+
+	const today = () => new Date().toISOString().slice(0, 10);
+	const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
+		"&": "&amp;",
+		"<": "&lt;",
+		">": "&gt;",
+		'"': "&quot;",
+		"'": "&#39;",
+	}[character] || character));
+	const tagsFromInput = (value: string) => value.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean);
+	const iconPaths: Record<string, string> = {
+		home: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
+		posts: '<path d="M5 3h10l4 4v14H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M14 3v5h5M7 12h10M7 16h10"/>',
+		diary: '<rect x="4" y="4" width="16" height="17" rx="2"/><path d="M8 2v4M16 2v4M4 9h16M8 13h3M8 17h6"/>',
+		logout: '<path d="M10 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5M15 16l4-4-4-4M8 12h11"/>',
+		back: '<path d="m15 18-6-6 6-6"/>',
+		plus: '<path d="M12 5v14M5 12h14"/>',
+		trash: '<path d="M4 7h16M10 3h4M6 7l1 14h10l1-14M10 11v6M14 11v6"/>',
+		link: '<path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.2 1.2M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.2-1.2"/>',
+		music: '<path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/>',
+		honors: '<path d="M8 4h8v4a4 4 0 0 1-8 0zM12 12v5M8 21h8M9 17h6"/><path d="M8 6H4v2a4 4 0 0 0 4 4M16 6h4v2a4 4 0 0 1-4 4"/>',
+		guestbook: '<path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-7l-5 4v-4H6a2 2 0 0 1-2-2z"/><path d="M8 8h8M8 12h5"/>',
+		friends: '<path d="M16 20a4 4 0 0 0-8 0"/><circle cx="12" cy="8" r="3"/><path d="M20 20a4 4 0 0 0-3-3.87M17 5.13a3 3 0 0 1 0 5.74M4 20a4 4 0 0 1 3-3.87M7 5.13a3 3 0 0 0 0 5.74"/>',
+	};
+	const icon = (name: string) => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[name]}</svg>`;
+	const moodEmojis = ["😀", "😊", "😌", "🤍", "🥰", "😎", "🤔", "😴", "🥳", "😭", "😤", "😮", "🤗", "🙃", "🌈", "✨", "🌙", "☀️", "🍀", "🎧"];
+
+	function emptyEntry(collection: CollectionName): Entry {
+		return {
+			collection,
+			slug: "",
+			title: "",
+			date: today(),
+			updated: "",
+			draft: true,
+			hidden: false,
+			description: "",
+			image: "",
+			tags: [],
+			category: "",
+			lang: "",
+			mood: "😊",
+			moodLabel: "今天的心情",
+			excerpt: "",
+			cover: "",
+			pinned: false,
+			body: "",
+		};
+	}
+
+	class AdminApp extends HTMLElement {
+		private kind: CollectionName = "posts";
+		private module: AdminModule | null = null;
+		private items: Entry[] = [];
+		private current: Entry | null = null;
+		private dataSource = "";
+		private dataSha = "";
+		private notice = "";
+		private busy = false;
+
+		connectedCallback() {
+			if (this.dataset.ready === "true") return;
+			this.dataset.ready = "true";
+			this.addEventListener("click", this.handleClick);
+			this.addEventListener("submit", this.handleSubmit);
+			this.addEventListener("input", this.handleInput);
+			void this.checkSession();
+		}
+
+		private async checkSession() {
+			try {
+				const response = await fetch("/api/admin/session", { credentials: "same-origin" });
+				const data = await response.json() as { authenticated?: boolean };
+				if (data.authenticated) {
+					this.renderWorkspace();
+					if (this.module) await this.loadModule();
+					else await this.loadItems();
+				} else {
+					this.renderLogin();
+				}
+			} catch {
+				this.renderLogin("后台接口暂时无法连接，请确认 Cloudflare Pages Functions 已部署。");
+			}
+		}
+
+		private renderLogin(error = "") {
+			this.innerHTML = `<section class="admin-auth-panel">
+				<div class="admin-auth-icon"><svg viewBox="100 40 320 280" aria-hidden="true" focusable="false"><path d="M256 58C268 105 280 140 296 176L340 146 376 118 352 196 330 206 400 250 330 272 300 296 256 300 212 296 182 272 112 250 182 206 160 196 136 118 172 146 216 176C232 140 244 105 256 58Z" fill="currentColor" /></svg></div>
+				<p class="admin-eyebrow">PRIVATE WORKSPACE</p>
+				<h1>进入内容后台</h1>
+				<p class="admin-muted">这里用于管理文章和日记，访客不会看到这个页面。</p>
+				<form id="login-form" class="admin-login-form">
+					<label>管理员密码<input name="password" type="password" autocomplete="current-password" placeholder="输入后台密码" required /></label>
+					<button class="admin-primary-button" type="submit">登录后台 <span aria-hidden="true">→</span></button>
+				</form>
+				${error ? `<p class="admin-error">${escapeHtml(error)}</p>` : ""}
+				<p class="admin-auth-hint">部署后可使用 Cloudflare Access 保护 <code>/admin</code>，密码登录用于本地测试和备用访问。</p>
+			</section>`;
+		}
+
+		private moduleTitle() {
+			return this.module === "music" ? "\u97f3\u4e50" : this.module === "honors" ? "\u8363\u8a89\u5899" : this.module === "friends" ? "\u53cb\u94fe" : "\u7559\u8a00\u677f";
+		}
+
+		private moduleDescription() {
+			return this.module === "music"
+				? "\u7f16\u8f91\u6b4c\u5355\u4fe1\u606f\uff1b\u97f3\u9891\u6587\u4ef6\u4ecd\u9700\u653e\u5165 public/audio/\u3002"
+				: this.module === "honors"
+					? "\u7ef4\u62a4\u5173\u4e8e\u9875\u9762\u7684\u8363\u8a89\u8bb0\u5f55\uff0c\u6bcf\u9879\u8bb0\u5f55\u4f7f\u7528\u4e00\u6bb5 Markdown\u3002"
+					: this.module === "friends"
+						? "\u7f16\u8f91\u597d\u53cb\u7684\u7f51\u7ad9\u540d\u79f0\u3001\u4e3b\u9875\u3001\u5934\u50cf\u548c\u7b80\u4ecb\u3002"
+						: "\u4fee\u6539\u7559\u8a00\u677f\u6807\u9898\u3001\u8bf4\u660e\u548c Twikoo \u670d\u52a1\u5730\u5740\u3002";
+		}
+
+		private contentSidebar() {
+			return `<div class="admin-side-intro"><p class="admin-eyebrow">CONTENT STUDIO</p><div class="admin-side-title"><h1>${this.kind === "posts" ? "\u6587\u7ae0" : "\u65e5\u8bb0"}</h1><button class="admin-new-button" data-action="new" type="button" aria-label="\u65b0\u5efa\u5185\u5bb9" title="\u65b0\u5efa\u5185\u5bb9">${icon("plus")}</button></div></div>
+				<div class="admin-list-heading"><span>\u5168\u90e8\u5185\u5bb9</span></div>
+				<div class="admin-list" data-list><div class="admin-list-empty">\u6b63\u5728\u8bfb\u53d6\u5185\u5bb9\u2026</div></div>
+				<div class="admin-sidebar-footer"><span class="admin-status-dot"></span><span>GitHub \u5185\u5bb9\u6e90</span></div>`;
+		}
+
+		private moduleSidebar() {
+			return `<div class="admin-side-intro"><p class="admin-eyebrow">SITE MODULES</p><div class="admin-side-title"><h1>${this.moduleTitle()}</h1></div><p class="admin-module-sidebar-copy">${this.moduleDescription()}</p></div>
+				<div class="admin-module-side-card"><span class="admin-module-side-icon">${icon(this.module || "music")}</span><strong>\u914d\u7f6e\u6587\u4ef6</strong><small>\u4fdd\u5b58\u540e\u63d0\u4ea4\u5230 GitHub</small></div>
+				<div class="admin-sidebar-footer"><span class="admin-status-dot"></span><span>GitHub \u5185\u5bb9\u6e90</span></div>`;
+		}
+
+		private renderWorkspace() {
+			this.innerHTML = `<section class="admin-workspace">
+				<aside class="admin-rail" aria-label="\u540e\u53f0\u5bfc\u822a">
+					<a class="admin-rail-button" href="/" aria-label="\u8fd4\u56de\u535a\u5ba2" title="\u8fd4\u56de\u535a\u5ba2">${icon("home")}</a>
+					<button class="admin-rail-button ${!this.module && this.kind === "posts" ? "is-active" : ""}" data-kind="posts" type="button" aria-label="\u6587\u7ae0" title="\u6587\u7ae0">${icon("posts")}</button>
+					<button class="admin-rail-button ${!this.module && this.kind === "diary" ? "is-active" : ""}" data-kind="diary" type="button" aria-label="\u65e5\u8bb0" title="\u65e5\u8bb0">${icon("diary")}</button>
+					<button class="admin-rail-button ${this.module === "music" ? "is-active" : ""}" data-module="music" type="button" aria-label="\u97f3\u4e50" title="\u97f3\u4e50">${icon("music")}</button>
+					<button class="admin-rail-button ${this.module === "honors" ? "is-active" : ""}" data-module="honors" type="button" aria-label="\u8363\u8a89\u5899" title="\u8363\u8a89\u5899">${icon("honors")}</button>
+					<button class="admin-rail-button ${this.module === "friends" ? "is-active" : ""}" data-module="friends" type="button" aria-label="\u53cb\u94fe" title="\u53cb\u94fe">${icon("friends")}</button>
+					<button class="admin-rail-button ${this.module === "guestbook" ? "is-active" : ""}" data-module="guestbook" type="button" aria-label="\u7559\u8a00\u677f" title="\u7559\u8a00\u677f">${icon("guestbook")}</button>
+					<div class="admin-rail-spacer"></div>
+					<button class="admin-rail-button" data-action="logout" type="button" aria-label="\u9000\u51fa\u767b\u5f55" title="\u9000\u51fa\u767b\u5f55">${icon("logout")}</button>
+				</aside>
+				<aside class="admin-sidebar">${this.module ? this.moduleSidebar() : this.contentSidebar()}</aside>
+				<section class="admin-editor" data-editor></section>
+			</section>`;
+			if (this.module) this.renderModuleEditor();
+		}
+
+		private async loadItems() {
+			this.setList(`<div class="admin-list-empty">正在读取内容…</div>`);
+			try {
+				const response = await fetch(`/api/admin/${this.kind}`, { credentials: "same-origin" });
+				const data = await response.json() as Entry[] | { error?: string };
+				if (!response.ok || !Array.isArray(data)) throw new Error((data as { error?: string }).error || "内容读取失败。");
+				this.items = data;
+				this.renderList();
+				this.renderEditor();
+			} catch (error) {
+				this.setList(`<div class="admin-list-empty admin-error">${escapeHtml(error instanceof Error ? error.message : "内容读取失败。")}</div>`);
+				this.renderEditor();
+			}
+		}
+
+		private async loadModule() {
+			if (!this.module) return;
+			this.dataSource = "\u6b63\u5728\u8bfb\u53d6\u914d\u7f6e\u2026";
+			this.dataSha = "";
+			this.renderModuleEditor();
+			try {
+				const response = await fetch(`/api/admin/${this.module}`, { credentials: "same-origin" });
+				const data = await response.json() as { source?: string; sha?: string; error?: string };
+				if (!response.ok || typeof data.source !== "string") throw new Error(data.error || "\u914d\u7f6e\u8bfb\u53d6\u5931\u8d25\u3002");
+				this.dataSource = data.source;
+				this.dataSha = data.sha || "";
+				this.renderModuleEditor();
+			} catch (error) {
+				this.dataSource = "";
+				this.renderModuleEditor(error instanceof Error ? error.message : "\u914d\u7f6e\u8bfb\u53d6\u5931\u8d25\u3002");
+			}
+		}
+
+		private moduleTemplate() {
+			if (this.module === "music") return `\n---\ntitle: \u6b4c\u66f2\u540d\u79f0\nartist: \u6b4c\u624b\u540d\u79f0\nurl: /audio/song.mp3\n---\n`;
+			if (this.module === "honors") return `\n---\ndate: 2026-01\nname: \u5956\u9879\u540d\u79f0\nissuer: \u9881\u53d1\u5355\u4f4d\naward: \u83b7\u5f97\u7b49\u7ea7\n---\n`;
+			if (this.module === "friends") return `\n---\nname: \u670b\u53cb\u7684\u535a\u5ba2\nurl: https://your-blog.pages.dev\navatar: https://your-blog.pages.dev/avatar.png\ndescription: \u5206\u4eab\u6280\u672f\u3001\u751f\u6d3b\u548c\u6b63\u5728\u5b66\u4e60\u7684\u4e8b\u60c5\n---\n`;
+			return `\n---\ntitle: \u7559\u8a00\u677f\ndescription: \u7559\u4e0b\u4f60\u7684\u60f3\u6cd5\uff0c\u548c\u6211\u6253\u4e2a\u62db\u547c\u5427\u3002\nenvId: https://\u4f60\u7684-twikoo-\u670d\u52a1\u5730\u5740\n---\n`;
+		}
+
+		private renderModuleEditor(error = "") {
+			const editor = this.querySelector<HTMLElement>("[data-editor]");
+			if (!editor || !this.module) return;
+			const source = this.dataSource === "\u6b63\u5728\u8bfb\u53d6\u914d\u7f6e\u2026" ? "" : this.dataSource;
+			const helper = this.module === "music"
+				? "\u6bcf\u9996\u6b4c\u66f2\u4f7f\u7528\u4e00\u6bb5 --- \u5305\u8d77\u6765\u3002url \u5fc5\u987b\u5bf9\u5e94 public/audio/ \u91cc\u7684\u6587\u4ef6\u3002"
+				: this.module === "honors"
+					? "\u6bcf\u9879\u8363\u8a89\u4f7f\u7528\u4e00\u6bb5 --- \u5305\u8d77\u6765\uff0c\u53ef\u586b\u5199 date\u3001name\u3001issuer\u3001award\u3002"
+					: this.module === "friends"
+						? "\u6bcf\u4e2a\u597d\u53cb\u4f7f\u7528\u4e00\u6bb5 --- \u5305\u8d77\u6765\uff0c\u586b\u5199 name\u3001url\u3001avatar \u548c description\u3002"
+						: "envId \u586b\u5199 Twikoo \u670d\u52a1\u5730\u5740\uff1btitle \u548c description \u4f1a\u663e\u793a\u5728\u7559\u8a00\u677f\u9876\u90e8\u3002\u7ba1\u7406\u73b0\u6709\u7559\u8a00\u8bf7\u4f7f\u7528 Twikoo \u7ba1\u7406\u9762\u677f\u3002";
+			const guestbookAdminLink = this.module === "guestbook"
+				? `<a class="admin-secondary-button admin-admin-link" href="/guestbook/?admin=1" target="_blank" rel="noopener noreferrer">\u7ba1\u7406\u73b0\u6709\u7559\u8a00 \u2197</a>`
+				: "";
+			editor.innerHTML = `<div class="admin-editor-topbar">
+				<button class="admin-back-button" data-action="module-back" type="button">${icon("back")}<span>\u8fd4\u56de\u5185\u5bb9\u7ba1\u7406</span></button>
+				<span class="admin-save-state" role="status">${error ? "\u8bfb\u53d6\u5931\u8d25" : this.notice || "\u914d\u7f6e\u7f16\u8f91"}</span>
+				<div class="admin-editor-actions">${guestbookAdminLink}<button class="admin-secondary-button" data-module-action="template" type="button">\u63d2\u5165\u6a21\u677f</button><button class="admin-primary-button" data-module-action="save" type="button">\u4fdd\u5b58\u914d\u7f6e</button></div>
+			</div>
+			${error ? `<p class="admin-notice">${escapeHtml(error)}</p>` : ""}
+			<div class="admin-module-editor">
+				<div class="admin-module-heading"><div class="admin-module-heading-icon">${icon(this.module)}</div><div><p class="admin-eyebrow">${this.module.toUpperCase()} SETTINGS</p><h2>${this.moduleTitle()}</h2><p>${helper}</p></div></div>
+				${this.module === "music" ? `<div class="admin-audio-upload"><label><span>\u4e0a\u4f20\u672c\u5730\u97f3\u9891</span><input type="file" accept="audio/*,.mp3,.m4a,.ogg,.wav,.flac,.aac" data-audio-file /></label><button class="admin-secondary-button" data-module-action="upload" type="button">\u4e0a\u4f20\u5e76\u6dfb\u52a0</button><small data-upload-status>\u6587\u4ef6\u5c06\u63d0\u4ea4\u5230 public/audio/</small></div>` : ""}
+				<label class="admin-module-source-label">\u914d\u7f6e\u5185\u5bb9<textarea class="admin-module-source" data-module-source spellcheck="false" aria-label="${this.moduleTitle()}\u914d\u7f6e">${escapeHtml(source)}</textarea></label>
+				<div class="admin-module-tip"><strong>\u4fdd\u5b58\u524d\u68c0\u67e5</strong><span>${this.module === "music" ? "\u97f3\u9891\u6587\u4ef6\u9700\u8981\u5148\u653e\u5165 public/audio/\uff0c\u8fd9\u91cc\u53ea\u7f16\u8f91\u6b4c\u66f2\u540d\u79f0\u3001\u6b4c\u624b\u548c\u8def\u5f84\u3002" : this.module === "honors" ? "\u4fdd\u5b58\u540e\u5173\u4e8e\u9875\u9762\u4f1a\u81ea\u52a8\u8bfb\u53d6\u5e76\u5206\u9875\u663e\u793a\uff0c\u6bcf\u9875\u6700\u591a 5 \u9879\u3002" : this.module === "friends" ? "url \u4f7f\u7528 http(s) \u7f51\u5740\uff1bavatar \u53ef\u4ee5\u662f /images/ \u4e0b\u7684\u672c\u5730\u56fe\u7247\u6216 https \u56fe\u7247\u5730\u5740\u3002" : "\u7559\u8a00\u5185\u5bb9\u4f7f\u7528 Twikoo \u4fdd\u5b58\u3002\u70b9\u51fb\u53f3\u4e0a\u65b9\u201c\u7ba1\u7406\u73b0\u6709\u7559\u8a00\u201d\uff0c\u767b\u5f55 Twikoo \u7ba1\u7406\u5bc6\u7801\u540e\u53ef\u9690\u85cf\u3001\u663e\u793a\u3001\u5220\u9664\u3001\u7f16\u8f91\u548c\u7f6e\u9876\u3002"}</span></div>
+			</div>`;
+		}
+
+		private setList(html: string) {
+			const list = this.querySelector<HTMLElement>("[data-list]");
+			if (list) list.innerHTML = html;
+		}
+
+		private renderList() {
+			const list = this.querySelector<HTMLElement>("[data-list]");
+			if (!list) return;
+			if (!this.items.length) {
+				list.innerHTML = `<div class="admin-list-empty"><strong>还没有内容</strong><span>点击上方“新建”开始写作。</span></div>`;
+				return;
+			}
+			list.innerHTML = this.items.map((item) => `<button class="admin-list-item ${this.current?.slug === item.slug ? "is-selected" : ""}" data-action="edit" data-slug="${escapeHtml(item.slug)}" type="button">
+				<span class="admin-list-item-icon">${this.kind === "posts" ? "✎" : escapeHtml(item.mood || "☼")}</span>
+				<span class="admin-list-item-copy"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.date || "暂无日期")} · ${item.draft ? "草稿" : item.hidden ? "已隐藏" : "已发布"}</small></span>
+				<span class="admin-list-item-arrow">›</span>
+			</button>`).join("");
+		}
+
+		private renderEditor() {
+			const editor = this.querySelector<HTMLElement>("[data-editor]");
+			if (!editor) return;
+			if (!this.current) {
+				editor.innerHTML = `<div class="admin-editor-empty"><div class="admin-empty-mark"><svg viewBox="100 40 320 280" aria-hidden="true" focusable="false"><path d="M256 58C268 105 280 140 296 176L340 146 376 118 352 196 330 206 400 250 330 272 300 296 256 300 212 296 182 272 112 250 182 206 160 196 136 118 172 146 216 176C232 140 244 105 256 58Z" fill="currentColor" /></svg></div><h2>开始写点什么</h2><button class="admin-primary-button" data-action="new" type="button">新建${this.kind === "posts" ? "文章" : "日记"}</button></div>`;
+				return;
+			}
+			const item = this.current;
+			const isPost = this.kind === "posts";
+			editor.innerHTML = `<div class="admin-editor-topbar">
+				<button class="admin-back-button" data-action="cancel" type="button">${icon("back")}<span>返回${isPost ? "文章" : "日记"}</span></button>
+				<span class="admin-save-state" role="status">${this.notice ? escapeHtml(this.notice) : item.sha ? item.draft ? "草稿" : item.hidden ? "已隐藏" : "已发布" : "新建内容"}</span>
+				<div class="admin-editor-actions">
+					${item.sha ? `<button class="admin-icon-button admin-danger-button" data-action="delete" type="button" aria-label="删除内容" title="删除内容">${icon("trash")}</button>` : ""}
+					<button class="admin-secondary-button" data-publish="false" type="submit" form="editor-form">保存草稿</button>
+					<button class="admin-primary-button" data-publish="true" type="submit" form="editor-form">发布</button>
+				</div>
+			</div>
+			<p class="admin-notice" ${this.notice ? "" : "hidden"}>${escapeHtml(this.notice)}</p>
+			<form id="editor-form" class="admin-editor-form">
+				<div class="admin-writing-surface">
+					<input class="admin-title-input" name="title" value="${escapeHtml(item.title)}" placeholder="在这里写标题…" aria-label="标题" required maxlength="160" />
+					<details class="admin-metadata">
+						<summary><span>文章信息</span><small>${isPost ? escapeHtml(item.category || "未分类") : escapeHtml(item.moodLabel || "设置心情")} · ${escapeHtml(item.date || today())}</small><span class="admin-meta-chevron">⌄</span></summary>
+						<div class="admin-form-grid">
+					<label>Slug<input name="slug" value="${escapeHtml(item.slug)}" placeholder="留空自动生成" ${item.sha ? "readonly" : ""} /></label>
+					<label>${isPost ? "发布日期" : "日记日期"}<input name="date" type="date" value="${escapeHtml(item.date || today())}" required /></label>
+					${isPost ? `<label>分类<input name="category" value="${escapeHtml(item.category)}" placeholder="例如：生活" /></label><label>语言<input name="lang" value="${escapeHtml(item.lang)}" placeholder="zh-CN" /></label><label class="admin-field-wide">摘要<input name="description" value="${escapeHtml(item.description)}" placeholder="文章列表中显示的摘要" /></label><label class="admin-field-wide">封面地址<input name="image" value="${escapeHtml(item.image)}" placeholder="/images/cover.jpg 或 https://…" /></label>` : `<label class="admin-mood-field" data-mood-picker>\u5fc3\u60c5\u8868\u60c5<span class="admin-mood-input"><input name="mood" value="${escapeHtml(item.mood)}" placeholder="\ud83d\ude0a" maxlength="8" /><button type="button" data-format="emoji" aria-label="\u9009\u62e9\u5fc3\u60c5\u8868\u60c5" title="\u9009\u62e9\u5fc3\u60c5\u8868\u60c5">\u263a</button></span><div class="admin-emoji-menu" data-emoji-menu hidden>${moodEmojis.map((emoji) => `<button type="button" data-emoji="${emoji}" aria-label="${emoji}">${emoji}</button>`).join("")}</div></label><label>心情说明<input name="moodLabel" value="${escapeHtml(item.moodLabel)}" placeholder="今天的心情" /></label><label class="admin-field-wide">摘要<input name="excerpt" value="${escapeHtml(item.excerpt)}" placeholder="日记卡片中显示的摘要" /></label><label class="admin-field-wide">封面地址<input name="cover" value="${escapeHtml(item.cover)}" placeholder="/images/diary.jpg 或 https://…" /></label>`}
+					<label class="admin-field-wide">标签<input name="tags" value="${escapeHtml(item.tags.join(", "))}" placeholder="多个标签用逗号分隔" /></label>
+					<label class="admin-checkbox-field admin-field-wide"><input name="hidden" type="checkbox" ${item.hidden ? "checked" : ""} /><span><strong>隐藏这篇内容</strong><small>隐藏后不会出现在首页、文章总览、分类、标签或 RSS 中，但原链接仍可访问。</small></span></label>
+						</div>
+					</details>
+					<div class="admin-markdown-toolbar" role="toolbar" aria-label="Markdown 格式">
+						<button type="button" data-format="heading" title="二级标题" aria-label="二级标题">H₂</button>
+						<button type="button" data-format="bold" title="粗体" aria-label="粗体"><strong>B</strong></button>
+						<button type="button" data-format="italic" title="斜体" aria-label="斜体"><em>I</em></button>
+						<span class="admin-toolbar-divider"></span>
+						<button type="button" data-format="quote" title="引用" aria-label="引用">❝</button>
+						<button type="button" data-format="list" title="列表" aria-label="列表">☷</button>
+						<button type="button" data-format="link" title="插入链接" aria-label="插入链接">${icon("link")}</button>
+						<button type="button" data-format="code" title="\u4ee3\u7801" aria-label="\u4ee3\u7801">&lt;/&gt;</button>
+						<button type="button" data-format="image" title="\u56fe\u7247" aria-label="\u56fe\u7247">\u25a7</button>
+						<button type="button" data-format="table" title="\u8868\u683c" aria-label="\u8868\u683c">\u25a6</button>
+						<button type="button" data-format="rule" title="\u5206\u5272\u7ebf" aria-label="\u5206\u5272\u7ebf">\u2014</button>
+						<div class="admin-emoji-wrap"><button type="button" data-format="emoji" title="\u63d2\u5165\u8868\u60c5" aria-label="\u63d2\u5165\u8868\u60c5">\u263a</button><div class="admin-emoji-menu" data-emoji-menu hidden>${moodEmojis.map((emoji) => `<button type="button" data-emoji="${emoji}" aria-label="${emoji}">${emoji}</button>`).join("")}</div></div>
+					</div>
+					<textarea class="admin-body-input" name="body" placeholder="从这里开始写正文，支持 Markdown…" aria-label="正文（Markdown）" spellcheck="false">${escapeHtml(item.body)}</textarea>
+				</div>
+			</form>`;
+		}
+
+		private async handleSubmit(event: Event) {
+			event.preventDefault();
+			const form = event.target as HTMLFormElement;
+			if (form.id === "login-form") {
+				const password = new FormData(form).get("password");
+				this.setBusy(true);
+				try {
+					const response = await fetch("/api/admin/login", { method: "POST", headers: { "content-type": "application/json" }, credentials: "same-origin", body: JSON.stringify({ password }) });
+					const data = await response.json() as { error?: string };
+					if (!response.ok) throw new Error(data.error || "登录失败。");
+					this.renderWorkspace();
+					await this.loadItems();
+				} catch (error) {
+					this.renderLogin(error instanceof Error ? error.message : "登录失败。");
+				} finally {
+					this.setBusy(false);
+				}
+				return;
+			}
+			if (form.id === "module-form") return;
+			if (form.id !== "editor-form" || this.busy) return;
+			const data = new FormData(form);
+			const submitter = (event as SubmitEvent).submitter as HTMLButtonElement | null;
+			const payload: Record<string, unknown> = {
+				title: data.get("title"),
+				slug: data.get("slug"),
+				[this.kind === "posts" ? "published" : "date"]: data.get("date"),
+				draft: submitter?.dataset.publish !== "true",
+				hidden: data.get("hidden") === "on",
+				updated: data.get("updated") || "",
+				tags: tagsFromInput(String(data.get("tags") || "")),
+				body: data.get("body"),
+			};
+			if (this.kind === "posts") Object.assign(payload, { description: data.get("description"), image: data.get("image"), category: data.get("category"), lang: data.get("lang") });
+			else Object.assign(payload, { mood: data.get("mood"), moodLabel: data.get("moodLabel"), excerpt: data.get("excerpt"), cover: data.get("cover"), pinned: false });
+			this.setBusy(true);
+			const state = this.querySelector<HTMLElement>(".admin-save-state");
+			if (state) state.textContent = "正在提交…";
+			try {
+				const editing = Boolean(this.current?.sha);
+				const slug = this.current?.slug || "";
+				const response = await fetch(editing ? `/api/admin/${this.kind}/${encodeURIComponent(slug)}` : `/api/admin/${this.kind}`, {
+					method: editing ? "PUT" : "POST",
+					headers: { "content-type": "application/json" },
+					credentials: "same-origin",
+					body: JSON.stringify(payload),
+				});
+				const result = await response.json() as Entry | { error?: string };
+				if (!response.ok || !("slug" in result)) throw new Error((result as { error?: string }).error || "保存失败。");
+				this.current = result;
+				this.notice = "已保存，Cloudflare Pages 会自动构建网站。";
+				await this.loadItems();
+			} catch (error) {
+				this.notice = error instanceof Error ? error.message : "保存失败。";
+				if (state) state.textContent = "保存失败";
+				const notice = this.querySelector<HTMLElement>(".admin-notice");
+				if (notice) {
+					notice.textContent = this.notice;
+					notice.hidden = false;
+				}
+			} finally {
+				this.setBusy(false);
+			}
+		}
+
+		private handleInput(event: Event) {
+			if (!(event.target instanceof Element)) return;
+			if (event.target.closest("[data-module-source]")) {
+				const state = this.querySelector<HTMLElement>(".admin-save-state");
+				if (state) state.textContent = "未保存";
+				return;
+			}
+			if (!event.target.closest("#editor-form")) return;
+			const state = this.querySelector<HTMLElement>(".admin-save-state");
+			if (state) state.textContent = "未保存";
+			const notice = this.querySelector<HTMLElement>(".admin-notice");
+			if (notice) notice.hidden = true;
+		}
+
+		private async saveModule() {
+			if (!this.module || this.busy) return;
+			const area = this.querySelector<HTMLTextAreaElement>("[data-module-source]");
+			if (!area || !area.value.trim()) return;
+			this.setBusy(true);
+			const state = this.querySelector<HTMLElement>(".admin-save-state");
+			if (state) state.textContent = "正在保存…";
+			try {
+				const response = await fetch(`/api/admin/${this.module}`, {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					credentials: "same-origin",
+					body: JSON.stringify({ source: area.value, sha: this.dataSha }),
+				});
+				const data = await response.json() as { saved?: boolean; sha?: string; error?: string };
+				if (!response.ok || !data.saved) throw new Error(data.error || "保存配置失败。");
+				this.dataSha = data.sha || this.dataSha;
+				this.notice = "已保存，Cloudflare Pages 会自动构建网站。";
+				if (state) state.textContent = "已保存";
+			} catch (error) {
+				const message = error instanceof Error ? error.message : "保存配置失败。";
+				if (state) state.textContent = message;
+			} finally {
+				this.setBusy(false);
+			}
+		}
+
+		private async uploadAudio() {
+			if (this.module !== "music" || this.busy) return;
+			const input = this.querySelector<HTMLInputElement>("[data-audio-file]");
+			const file = input?.files?.[0];
+			const status = this.querySelector<HTMLElement>("[data-upload-status]");
+			if (!file) {
+				if (status) status.textContent = "请选择音频文件。";
+				return;
+			}
+			this.setBusy(true);
+			if (status) status.textContent = "正在上传…";
+			try {
+				const form = new FormData();
+				form.append("file", file);
+				const response = await fetch("/api/admin/music", { method: "POST", credentials: "same-origin", body: form });
+				const data = await response.json() as { uploaded?: boolean; url?: string; name?: string; error?: string };
+				if (!response.ok || !data.uploaded || !data.url) throw new Error(data.error || "音频上传失败。");
+				const area = this.querySelector<HTMLTextAreaElement>("[data-module-source]");
+				if (area) {
+					const title = file.name.replace(/\.[^.]+$/, "");
+					area.value = `${area.value.trimEnd()}\n---\ntitle: ${title}\nartist: 未知歌手\nurl: ${data.url}\n---\n`.trimStart();
+					area.dispatchEvent(new Event("input", { bubbles: true }));
+				}
+				if (status) status.textContent = `已上传 ${data.name || file.name}，请保存配置。`;
+			} catch (error) {
+				if (status) status.textContent = error instanceof Error ? error.message : "音频上传失败。";
+			} finally {
+				this.setBusy(false);
+			}
+		}
+
+		private insertMarkdown(format: string) {
+			const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
+			if (!area) return;
+			const start = area.selectionStart;
+			const end = area.selectionEnd;
+			const selected = area.value.slice(start, end);
+			const snippets: Record<string, string> = {
+				heading: `## ${selected || "标题"}`,
+				bold: `**${selected || "加粗文字"}**`,
+				italic: `*${selected || "斜体文字"}*`,
+				quote: `> ${selected || "引用内容"}`,
+				list: `- ${selected || "列表项"}`,
+				link: `[${selected || "链接文字"}](https://)`,
+				code: `\`\`\`\n${selected || "const hello = \"world\";"}\n\`\`\``,
+				image: `![${selected || "????"}](/images/example.jpg)`,
+				table: `| ?? | ?? |\n| --- | --- |\n| ${selected || "??"} | ?? |`,
+				rule: "\n---\n",
+			};
+			if (!snippets[format]) return;
+			area.setRangeText(snippets[format], start, end, "end");
+			area.focus();
+			area.dispatchEvent(new Event("input", { bubbles: true }));
+		}
+
+		private toggleEmojiMenu(button: HTMLButtonElement) {
+			const menu = button.parentElement?.querySelector<HTMLElement>("[data-emoji-menu]");
+			if (menu) menu.hidden = !menu.hidden;
+		}
+
+		private chooseEmoji(value: string, button?: HTMLButtonElement) {
+			const moodInput = this.querySelector<HTMLInputElement>("input[name='mood']");
+			const moodPicker = this.querySelector<HTMLElement>("[data-mood-picker]");
+			if (moodPicker && button?.closest("[data-mood-picker]")) {
+				if (moodInput) moodInput.value = value;
+				moodPicker.querySelector<HTMLElement>("[data-emoji-menu]")?.setAttribute("hidden", "true");
+				moodInput?.dispatchEvent(new Event("input", { bubbles: true }));
+				return;
+			}
+			const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
+			if (!area) return;
+			area.setRangeText(value, area.selectionStart, area.selectionEnd, "end");
+			area.focus();
+			area.dispatchEvent(new Event("input", { bubbles: true }));
+			this.querySelector<HTMLElement>("[data-emoji-menu]")?.setAttribute("hidden", "true");
+		}
+
+		private async handleClick(event: Event) {
+			const target = event.target;
+			if (!(target instanceof Element)) return;
+			const button = target.closest<HTMLButtonElement>("button[data-action], button[data-kind], button[data-module], button[data-module-action], button[data-format], button[data-emoji]");
+			if (!button || this.busy) return;
+			if (button.dataset.emoji) {
+				this.chooseEmoji(button.dataset.emoji, button);
+				return;
+			}
+			if (button.dataset.format) {
+				if (button.dataset.format === "emoji") {
+					this.toggleEmojiMenu(button);
+					return;
+				}
+				this.insertMarkdown(button.dataset.format);
+				return;
+			}
+			if (button.dataset.module) {
+				this.module = button.dataset.module as AdminModule;
+				this.current = null;
+				this.notice = "";
+				this.renderWorkspace();
+				await this.loadModule();
+				return;
+			}
+			if (button.dataset.moduleAction === "save") {
+				await this.saveModule();
+				return;
+			}
+			if (button.dataset.moduleAction === "upload") {
+				await this.uploadAudio();
+				return;
+			}
+			if (button.dataset.moduleAction === "template") {
+				const area = this.querySelector<HTMLTextAreaElement>("[data-module-source]");
+				if (area) {
+					area.value = `${area.value.trimEnd()}\n${this.moduleTemplate()}`.trimStart();
+					area.dispatchEvent(new Event("input", { bubbles: true }));
+				}
+				return;
+			}
+			if (button.dataset.kind) {
+				this.module = null;
+				this.kind = button.dataset.kind as CollectionName;
+				this.current = null;
+				this.notice = "";
+				this.renderWorkspace();
+				await this.loadItems();
+				return;
+			}
+			switch (button.dataset.action) {
+				case "module-back":
+					this.module = null;
+					this.notice = "";
+					this.renderWorkspace();
+					await this.loadItems();
+					break;
+				case "new":
+					this.current = emptyEntry(this.kind);
+					this.notice = "";
+					this.renderList();
+					this.renderEditor();
+					break;
+				case "edit":
+					this.current = this.items.find((item) => item.slug === button.dataset.slug) || null;
+					this.notice = "";
+					this.renderList();
+					this.renderEditor();
+					break;
+				case "cancel":
+					this.current = null;
+					this.notice = "";
+					this.renderList();
+					this.renderEditor();
+					break;
+				case "delete":
+					await this.deleteCurrent();
+					break;
+				case "logout":
+					await fetch("/api/admin/logout", { method: "POST", credentials: "same-origin" });
+					this.current = null;
+					this.renderLogin();
+					break;
+			}
+		}
+
+		private async deleteCurrent() {
+			if (!this.current?.slug || !confirm(`确定删除“${this.current.title}”吗？此操作会提交 GitHub 删除记录。`)) return;
+			this.setBusy(true);
+			try {
+				const response = await fetch(`/api/admin/${this.kind}/${encodeURIComponent(this.current.slug)}`, { method: "DELETE", credentials: "same-origin" });
+				const data = await response.json() as { error?: string };
+				if (!response.ok) throw new Error(data.error || "删除失败。");
+				this.current = null;
+				this.notice = "内容已删除。";
+				await this.loadItems();
+			} catch (error) {
+				this.notice = error instanceof Error ? error.message : "删除失败。";
+				this.renderEditor();
+			} finally {
+				this.setBusy(false);
+			}
+		}
+
+		private setBusy(value: boolean) {
+			this.busy = value;
+			this.classList.toggle("is-busy", value);
+		}
+	}
+
+	if (!customElements.get("admin-app")) customElements.define("admin-app", AdminApp);
+</script>
+
+<style is:global>
+	.admin-page { color-scheme: light; font-family: Roboto, ui-sans-serif, system-ui, sans-serif; background: radial-gradient(circle at 4% 0%, #fff 0, #f3f6f8 42%, #e9eff2 100%); color: #26323a; }
+	.admin-page, .admin-page * { box-sizing: border-box; }
+	.admin-page { min-width: 320px; min-height: 100vh; margin: 0; }
+	.admin-page button, .admin-page input, .admin-page textarea { font: inherit; }
+	.admin-page button { cursor: pointer; }
+	.admin-shell { width: min(1440px, calc(100% - 3rem)); margin: 0 auto; padding: 1.5rem 0 2.5rem; }
+	.admin-header { display: flex; align-items: center; justify-content: space-between; min-height: 4.5rem; padding: 0 .15rem; }
+	.admin-brand, .admin-back-link { color: inherit; text-decoration: none; }
+	.admin-brand { display: flex; align-items: center; gap: .7rem; }
+	.admin-brand-mark { display: grid; place-items: center; width: 2.3rem; aspect-ratio: 1; border-radius: .8rem; color: #e9bd68; background: #1d3a63; font-weight: 800; box-shadow: 0 .45rem 1.1rem #1d4f8244; }
+	.admin-brand-mark svg { width: 1.35rem; height: 1.35rem; }
+	.admin-brand strong, .admin-brand small { display: block; }
+	.admin-brand strong { font-size: .95rem; }
+	.admin-brand small, .admin-eyebrow { color: #5f7285; font-size: .62rem; font-weight: 800; letter-spacing: .14em; }
+	.admin-brand small { margin-top: .15rem; }
+	.admin-back-link { color: #66767f; font-size: .78rem; }
+	.admin-back-link:hover { color: #1d4f82; }
+	.admin-loading { display: grid; min-height: 28rem; place-items: center; color: #82919a; }
+	.admin-auth-panel { width: min(34rem, 100%); margin: 6rem auto 0; padding: 2.75rem; border: 1px solid #d9e1e5; border-radius: 1.35rem; background: #ffffffed; box-shadow: 0 1.25rem 3.5rem #54656d1a; }
+	.admin-auth-icon, .admin-empty-mark { display: grid; place-items: center; width: 3rem; aspect-ratio: 1; border-radius: 1rem; color: #1d4f82; background: #e2eaf3; }
+	.admin-auth-icon svg, .admin-empty-mark svg { width: 1.6rem; height: 1.6rem; }
+	.admin-auth-panel h1, .admin-editor h2, .admin-side-intro h1 { margin: .4rem 0 .55rem; color: #27343c; }
+	.admin-auth-panel h1 { font-size: 1.9rem; letter-spacing: -.02em; }
+	.admin-muted, .admin-side-intro p, .admin-auth-hint { color: #7d8b92; font-size: .78rem; line-height: 1.65; }
+	.admin-login-form { display: grid; gap: .85rem; margin-top: 1.5rem; }
+	.admin-login-form label, .admin-field-wide, .admin-form-grid label, .admin-body-field { display: grid; gap: .38rem; color: #596970; font-size: .72rem; font-weight: 700; }
+	.admin-page input, .admin-page textarea { width: 100%; border: 1px solid #d6e0e4; border-radius: .65rem; outline: none; color: #29383f; background: #fff; transition: border-color 160ms ease, box-shadow 160ms ease; }
+	.admin-page input { min-height: 2.7rem; padding: .62rem .78rem; }
+	.admin-page textarea { min-height: 42rem; resize: vertical; padding: 1.1rem 1.2rem; border-radius: .8rem; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .86rem; line-height: 1.8; }
+	.admin-page input:focus, .admin-page textarea:focus { border-color: #2f6ba8; box-shadow: 0 0 0 .2rem #1d4f821c; }
+	.admin-checkbox-field { display: flex !important; align-items: flex-start; gap: .6rem !important; padding: .7rem .8rem; border: 1px dashed #c2cfdd; border-radius: .7rem; color: #66747d; background: #f6f9fc; }
+	.admin-checkbox-field > input[type="checkbox"] { flex: 0 0 auto; width: 1.05rem; min-width: 1.05rem; height: 1.05rem; min-height: 1.05rem; margin: .14rem 0 0; padding: 0; accent-color: #1d4f82; }
+	.admin-checkbox-field > span { display: grid; gap: .15rem; }
+	.admin-checkbox-field strong { color: #53646c; font-size: .73rem; }
+	.admin-checkbox-field small { color: #7d8b97; font-size: .64rem; font-weight: 500; line-height: 1.5; }
+	.admin-primary-button, .admin-secondary-button, .admin-danger-button, .admin-new-button { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; min-height: 2.35rem; padding: .45rem .85rem; border-radius: .6rem; font-size: .74rem; font-weight: 700; transition: transform 160ms ease, background 160ms ease, border-color 160ms ease; }
+	.admin-primary-button { border: 1px solid #1a4676; color: #fff; background: #1d4f82; box-shadow: 0 .35rem .8rem #1d4f8226; }
+	.admin-primary-button:hover { transform: translateY(-1px); background: #163f6b; }
+	.admin-secondary-button { border: 1px solid #d6e0e4; color: #5b6b73; background: #fff; }
+	.admin-secondary-button:hover { border-color: #2f6ba8; color: #1a4676; }
+	.admin-admin-link { color: #5b6b73; text-decoration: none; white-space: nowrap; }
+	.admin-danger-button { border: 1px solid #e2c4c4; color: #a34a4a; background: #fdf6f6; }
+	.admin-error { margin: .8rem 0 0; color: #b04141; font-size: .72rem; line-height: 1.5; }
+	.admin-auth-hint { margin: 1rem 0 0; padding-top: .85rem; border-top: 1px dashed #dbe3e6; font-size: .68rem; }
+	.admin-auth-hint code { color: #1a4676; }
+	.admin-workspace { display: grid; grid-template-columns: 4.5rem 20rem minmax(0, 1fr); min-height: 52rem; overflow: hidden; border: 1px solid #d9e1e5; border-radius: 1.35rem; background: #ffffffed; box-shadow: 0 1.25rem 3.5rem #54656d1a; }
+	.admin-rail { display: flex; flex-direction: column; align-items: center; gap: .65rem; padding: 1rem .7rem; border-right: 1px solid #e4eaec; background: #fff; }
+	.admin-rail-button { display: grid; place-items: center; width: 2.75rem; aspect-ratio: 1; border: 0; border-radius: .8rem; color: #9aa8ae; background: transparent; font-size: 1.15rem; text-decoration: none; transition: color 160ms ease, background 160ms ease, transform 160ms ease; }
+	.admin-rail-button:hover { color: #3a72ac; background: #e9f0f8; transform: translateY(-1px); }
+	.admin-rail-button.is-active { color: #2f6ba8; background: #e2eaf4; box-shadow: inset 0 0 0 1px #c6d6ea; }
+	.admin-rail-spacer { flex: 1; }
+	.admin-sidebar { display: flex; min-width: 0; flex-direction: column; padding: 1.5rem; border-right: 1px solid #e4eaec; background: linear-gradient(180deg, #f9fbfc 0%, #f3f7f8 100%); }
+	.admin-side-intro h1 { font-size: 1.35rem; letter-spacing: -.02em; }
+	.admin-side-intro p { margin: 0; }
+	.admin-side-title { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-top: .45rem; }
+	.admin-side-title h1 { margin: 0; }
+	.admin-eyebrow { margin: 0; }
+	.admin-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: .35rem; margin: 1.4rem 0 1.2rem; padding: .25rem; border-radius: .75rem; background: #edf2f4; }
+	.admin-tab { display: grid; gap: .1rem; padding: .55rem .5rem; border: 0; border-radius: .55rem; color: #839198; background: transparent; text-align: left; }
+	.admin-tab span { font-size: .78rem; font-weight: 800; }
+	.admin-tab small { font-size: .57rem; }
+	.admin-tab.is-active { color: #1a4676; background: #fff; box-shadow: 0 .2rem .6rem #54656d12; }
+	.admin-list-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: .6rem; color: #53646c; font-size: .72rem; font-weight: 800; }
+	.admin-new-button { width: 2.25rem; min-height: 2.25rem; padding: 0; border: 1px dashed #b7c6d8; border-radius: .7rem; color: #1a4676; background: #f6f9fc; font-size: 1.1rem; }
+	.admin-list { display: grid; align-content: start; gap: .35rem; flex: 1; overflow: auto; min-height: 12rem; padding-right: .25rem; }
+	.admin-list-item { display: grid; grid-template-columns: 1.9rem minmax(0, 1fr) auto; align-items: center; gap: .55rem; width: 100%; padding: .65rem .55rem; border: 1px solid transparent; border-radius: .7rem; color: inherit; background: transparent; text-align: left; }
+	.admin-list-item:hover, .admin-list-item.is-selected { border-color: #c2cfdd; background: #fff; }
+	.admin-list-item-icon { display: grid; place-items: center; width: 1.75rem; aspect-ratio: 1; border-radius: .55rem; color: #1d4f82; background: #e2eaf3; font-size: .85rem; }
+	.admin-list-item-copy { display: grid; min-width: 0; gap: .18rem; }
+	.admin-list-item-copy strong { overflow: hidden; color: #3c4b53; font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+	.admin-list-item-copy small { color: #95a1a7; font-size: .61rem; }
+	.admin-list-item-arrow { color: #bdc7ca; font-size: 1.1rem; }
+	.admin-list-empty { display: grid; gap: .35rem; padding: 1.5rem .5rem; color: #94a1a7; font-size: .68rem; text-align: center; }
+	.admin-list-empty strong { color: #64737a; font-size: .75rem; }
+	.admin-sidebar-footer { display: flex; align-items: center; gap: .35rem; margin-top: auto; padding-top: 1rem; color: #91a0a6; font-size: .62rem; }
+	.admin-module-sidebar-copy { margin: .65rem 0 0; color: #829198; font-size: .72rem; line-height: 1.7; }
+	.admin-module-side-card { display: grid; grid-template-columns: 2.2rem minmax(0, 1fr); align-items: center; gap: .1rem .65rem; margin-top: 1.5rem; padding: .8rem; border: 1px solid #e4eaec; border-radius: .8rem; color: #65757d; background: #fff; font-size: .72rem; }
+	.admin-module-side-card small { grid-column: 2; color: #9aa6ab; font-size: .62rem; }
+	.admin-module-side-icon { display: grid; grid-row: 1 / span 2; place-items: center; width: 2.2rem; aspect-ratio: 1; border-radius: .65rem; color: #4d9bd8; background: #e7f3fd; }
+	.admin-module-side-icon svg { width: 1.1rem; height: 1.1rem; }
+	.admin-sidebar-footer button { margin-left: auto; border: 0; color: #5f7285; background: transparent; font-size: .62rem; }
+	.admin-status-dot { width: .4rem; aspect-ratio: 1; border-radius: 50%; background: #6fc18e; box-shadow: 0 0 0 .2rem #6fc18e22; }
+	.admin-editor { min-width: 0; background: #fff; }
+	.admin-editor-empty { display: grid; place-items: center; align-content: center; min-height: 36rem; color: #829197; text-align: center; }
+	.admin-editor-empty h2 { margin-bottom: .35rem; font-size: 1.2rem; }
+	.admin-editor-empty p { margin: 0 0 1rem; font-size: .75rem; }
+	.admin-editor-empty .admin-primary-button { margin-top: 1rem; }
+	.admin-editor-topbar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 1rem; min-height: 4.75rem; padding: .75rem 1.5rem; border-bottom: 1px solid #e9eef0; background: #fff; }
+	.admin-back-button { display: inline-flex; align-items: center; gap: .25rem; width: fit-content; padding: .4rem; border: 0; color: #62717a; background: transparent; font-size: .82rem; font-weight: 600; }
+	.admin-back-button:hover { color: #4c9bd6; }
+	.admin-back-button svg { width: 1.1rem; height: 1.1rem; }
+	.admin-save-state { color: #aa9b75; font-size: .75rem; }
+	.admin-editor-topbar .admin-editor-actions { justify-content: flex-end; }
+	.admin-editor-topbar .admin-primary-button { min-width: 5rem; border-color: #579fda; background: #66aee8; box-shadow: 0 .35rem .8rem #69aee82b; }
+	.admin-editor-topbar .admin-primary-button:hover { background: #4c9bd6; }
+	.admin-icon-button { width: 2.35rem; padding: 0; }
+	.admin-icon-button svg { width: 1.1rem; height: 1.1rem; }
+	.admin-editor-form { padding: 2.25rem clamp(1.75rem, 4vw, 4.5rem) 4rem; }
+	.admin-writing-surface { width: min(100%, 58rem); margin: 0 auto; }
+	.admin-title-input { width: 100%; min-height: 4.5rem; padding: .2rem 0; border: 0; border-radius: 0; color: #222b32; background: transparent; font-size: clamp(1.7rem, 2.5vw, 2.4rem); font-weight: 800; line-height: 1.35; letter-spacing: -.03em; }
+	.admin-title-input::placeholder { color: #abb5ba; }
+	.admin-title-input:focus { border: 0; box-shadow: none; }
+	.admin-metadata { margin: .65rem 0 1.5rem; border-bottom: 1px solid #e8edf0; }
+	.admin-metadata summary { display: flex; align-items: center; gap: .8rem; min-height: 3.1rem; padding: .2rem 0; color: #66747d; font-size: .8rem; cursor: pointer; list-style: none; }
+	.admin-metadata summary::-webkit-details-marker { display: none; }
+	.admin-metadata summary:hover { color: #4c9bd6; }
+	.admin-metadata summary small { min-width: 0; overflow: hidden; color: #a4afb5; font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+	.admin-meta-chevron { margin-left: auto; font-size: 1.25rem; transition: transform 160ms ease; }
+	.admin-metadata[open] .admin-meta-chevron { transform: rotate(180deg); }
+	.admin-metadata .admin-form-grid { margin: .5rem 0 1.25rem; padding: 1.25rem; border: 1px solid #e7edf1; border-radius: .85rem; background: #f8fafc; }
+	.admin-markdown-toolbar { display: flex; align-items: center; gap: .25rem; min-height: 3rem; padding: .35rem .5rem; border: 1px solid #e6edf1; border-radius: .7rem; background: #f5f9fc; }
+	.admin-markdown-toolbar button { display: grid; place-items: center; width: 2.3rem; height: 2.2rem; border: 0; border-radius: .45rem; color: #667780; background: transparent; font-size: .9rem; }
+	.admin-markdown-toolbar button:hover, .admin-markdown-toolbar button:focus-visible { color: #398fcf; background: #e2f1fc; outline: none; }
+	.admin-markdown-toolbar button svg { width: 1rem; height: 1rem; }
+	.admin-toolbar-divider { width: 1px; height: 1.3rem; margin: 0 .25rem; background: #d5e0e6; }
+	.admin-emoji-wrap { position: relative; }
+	.admin-emoji-menu { position: absolute; z-index: 3; top: calc(100% + .45rem); left: 0; display: grid; grid-template-columns: repeat(5, 2rem); gap: .2rem; width: 11rem; padding: .45rem; border: 1px solid #dce8ee; border-radius: .7rem; background: #fff; box-shadow: 0 .7rem 1.6rem #54656d1c; }
+	.admin-emoji-menu[hidden] { display: none; }
+	.admin-emoji-menu button { width: 1.9rem; height: 1.9rem; font-size: 1rem; }
+	.admin-mood-field { position: relative; }
+	.admin-mood-input { display: flex; align-items: stretch; }
+	.admin-mood-input input { border-radius: .65rem 0 0 .65rem; }
+	.admin-mood-input button { width: 2.7rem; border: 1px solid #d6e0e4; border-left: 0; border-radius: 0 .65rem .65rem 0; color: #1d4f82; background: #f6f9fc; }
+	.admin-mood-field > .admin-emoji-menu { top: calc(100% + 1.9rem); left: 0; }
+	.admin-module-editor { width: min(100%, 62rem); margin: 0 auto; padding: 2.4rem clamp(1.75rem, 4vw, 4.5rem) 4rem; }
+	.admin-module-heading { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 1.5rem; }
+	.admin-module-heading-icon { display: grid; flex: 0 0 auto; place-items: center; width: 3.2rem; aspect-ratio: 1; border-radius: .9rem; color: #4d9bd8; background: #e7f3fd; }
+	.admin-module-heading-icon svg { width: 1.45rem; height: 1.45rem; }
+	.admin-module-heading h2 { margin: .2rem 0 .35rem; font-size: 1.55rem; }
+	.admin-module-heading p { margin: 0; color: #84939a; font-size: .75rem; line-height: 1.6; }
+	.admin-audio-upload { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; margin: 0 0 1.1rem; padding: .75rem .85rem; border: 1px dashed #cfe0e8; border-radius: .75rem; background: #f7fbfd; }
+	.admin-audio-upload label { display: flex; align-items: center; gap: .65rem; color: #65757d; font-size: .72rem; font-weight: 700; }
+	.admin-audio-upload input[type="file"] { width: min(18rem, 100%); min-height: 2.2rem; padding: .3rem; border: 1px solid #d6e0e4; border-radius: .55rem; color: #718089; background: #fff; font-size: .7rem; }
+	.admin-audio-upload small { flex: 1 0 100%; color: #97a5aa; font-size: .64rem; }
+	.admin-module-source-label { display: grid; gap: .5rem; color: #596970; font-size: .75rem; font-weight: 700; }
+	.admin-module-source { min-height: 34rem; width: 100%; padding: 1.15rem; border: 1px solid #dce7eb; border-radius: .8rem; background: #fbfdfe; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .82rem; line-height: 1.75; }
+	.admin-module-tip { display: flex; gap: .55rem; margin-top: .8rem; padding: .7rem .8rem; border: 1px dashed #c2cfdd; border-radius: .6rem; color: #5f7285; background: #f6f9fc; font-size: .68rem; line-height: 1.6; }
+	.admin-module-tip strong { flex: 0 0 auto; color: #1a4676; }
+	.admin-body-input { min-height: 46rem; padding: 1.55rem .1rem; border: 0; border-radius: 0; color: #303a40; background: transparent; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .96rem; line-height: 1.85; }
+	.admin-body-input:focus { border: 0; box-shadow: none; }
+	.admin-body-input::placeholder { color: #aab6bb; }
+	.admin-notice { margin: 1rem clamp(1.75rem, 4vw, 4.5rem) 0; }
+	.admin-notice[hidden] { display: none; }
+	.admin-editor-head { display: flex; align-items: start; justify-content: space-between; gap: 1rem; margin-bottom: 1.4rem; padding-bottom: 1rem; border-bottom: 1px solid #e5ebed; }
+	.admin-editor-head h2 { font-size: 1.6rem; letter-spacing: -.02em; }
+	.admin-editor-actions { display: flex; gap: .45rem; }
+	.admin-notice { margin: -.65rem 0 1rem; padding: .6rem .75rem; border: 1px dashed #c2cfdd; border-radius: .55rem; color: #4e6070; background: #f6f9fc; font-size: .7rem; }
+	.admin-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.15rem 1rem; }
+	.admin-field-wide { grid-column: 1 / -1; }
+	.admin-body-field { margin-top: 1rem; }
+	.admin-form-footer { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5ebed; color: #93a0a6; font-size: .65rem; }
+	.admin-form-footer > span { max-width: 22rem; line-height: 1.5; }
+	.admin-form-footer > div { display: flex; flex: 0 0 auto; gap: .5rem; }
+	.is-busy { pointer-events: none; opacity: .72; }
+	@media (max-width: 780px) {
+		.admin-shell { width: min(100% - 1rem, 44rem); padding-top: .5rem; }
+		.admin-workspace { grid-template-columns: 1fr; }
+		.admin-rail { flex-direction: row; justify-content: flex-start; padding: .65rem .8rem; border-right: 0; border-bottom: 1px solid #e4eaec; }
+		.admin-rail-spacer { display: block; }
+		.admin-sidebar { border-right: 0; border-bottom: 1px solid #e4eaec; }
+		.admin-list { max-height: 14rem; min-height: 0; }
+		.admin-editor-topbar { padding: .75rem 1rem; }
+		.admin-editor-form { padding: 1.5rem 1rem 3rem; }
+		.admin-body-input { min-height: 30rem; }
+		.admin-module-editor { padding: 1.5rem 1rem 3rem; }
+		.admin-module-source { min-height: 26rem; }
+		.admin-form-footer { align-items: flex-start; flex-direction: column; }
+		.admin-form-footer > div { width: 100%; }
+		.admin-form-footer button { flex: 1; }
+	}
+	@media (max-width: 520px) {
+		.admin-auth-panel { margin-top: 3rem; padding: 1.5rem; }
+		.admin-form-grid { grid-template-columns: 1fr; }
+		.admin-field-wide { grid-column: auto; }
+		.admin-editor-topbar { grid-template-columns: 1fr auto; gap: .5rem; }
+		.admin-save-state { text-align: right; }
+		.admin-editor-topbar .admin-editor-actions { grid-column: 1 / -1; justify-content: stretch; }
+		.admin-editor-topbar .admin-editor-actions button:not(.admin-icon-button), .admin-editor-topbar .admin-editor-actions .admin-admin-link { flex: 1; }
+		.admin-metadata summary { gap: .4rem; }
+	}
+	@media (prefers-color-scheme: dark) {
+		.admin-page { color-scheme: dark; background: radial-gradient(circle at 4% 0%, #31404a 0, #202a31 46%, #172027 100%); }
+		.admin-workspace, .admin-auth-panel { border-color: #43515a; background: #26323ad9; box-shadow: 0 1rem 3rem #111a1e55; }
+		.admin-rail { border-color: #3e4b53; background: #202a31; }
+		.admin-rail-button { color: #8fa0a8; }
+		.admin-rail-button:hover, .admin-rail-button.is-active { color: #8fbde8; background: #1c3550; }
+		.admin-sidebar { border-color: #3e4b53; background: #202a31; }
+		.admin-editor, .admin-editor-topbar { border-color: #40505a; background: #26323a; }
+		.admin-title-input, .admin-body-input { color: #edf2f3; }
+		.admin-title-input::placeholder, .admin-body-input::placeholder { color: #829198; }
+		.admin-metadata { border-color: #40505a; }
+		.admin-metadata summary { color: #bbcad0; }
+		.admin-metadata .admin-form-grid, .admin-markdown-toolbar { border-color: #40505a; background: #2d3941; }
+		.admin-markdown-toolbar button { color: #bbcad0; }
+		.admin-markdown-toolbar button:hover { color: #8fbde8; background: #1c3550; }
+		.admin-module-side-card, .admin-module-source { border-color: #40505a; background: #2d3941; }
+		.admin-module-heading p, .admin-module-sidebar-copy { color: #aab8bd; }
+		.admin-module-tip { border-color: #3f4d5e; background: #2a3441; }
+		.admin-audio-upload { border-color: #40505a; background: #2d3941; }
+		.admin-audio-upload input[type="file"] { border-color: #4c5c65; color: #bbcad0; background: #26323a; }
+		.admin-emoji-menu { border-color: #4c5c65; background: #2d3941; }
+		.admin-mood-input button { border-color: #4c5c65; background: #2a3441; }
+		.admin-auth-panel h1, .admin-editor h2, .admin-side-intro h1, .admin-list-item-copy strong { color: #edf2f3; }
+		.admin-muted, .admin-side-intro p, .admin-auth-hint, .admin-form-footer, .admin-list-empty, .admin-back-link { color: #aab8bd; }
+		.admin-tabs { background: #182229; }
+		.admin-tab.is-active, .admin-list-item:hover, .admin-list-item.is-selected, .admin-secondary-button, .admin-page input, .admin-page textarea { border-color: #4c5c65; background: #2d3941; color: #edf2f3; }
+		.admin-checkbox-field { border-color: #3f4d5e; background: #2a3441; }
+		.admin-checkbox-field strong { color: #edf2f3; }
+		.admin-checkbox-field small { color: #aab8bd; }
+		.admin-editor-head, .admin-form-footer { border-color: #40505a; }
+		.admin-page input::placeholder, .admin-page textarea::placeholder { color: #809098; }
+	}
+</style>

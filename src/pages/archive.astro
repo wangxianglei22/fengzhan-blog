@@ -1,0 +1,15 @@
+---
+import ArchivePanel from "@components/ArchivePanel.astro";
+import MainGridLayout from "@layouts/MainGridLayout.astro";
+import { getSortedPostsList } from "../utils/content-utils";
+
+const sortedPostsList = await getSortedPostsList();
+const tags = Astro.url.searchParams.getAll("tag");
+const categories = Astro.url.searchParams.getAll("category");
+const uncategorized = Astro.url.searchParams.get("uncategorized") === "true";
+---
+
+<MainGridLayout title="文章总览">
+    <ArchivePanel posts={sortedPostsList} {tags} {categories} {uncategorized}></ArchivePanel>
+</MainGridLayout>
+

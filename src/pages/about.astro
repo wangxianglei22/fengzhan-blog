@@ -1,0 +1,177 @@
+---
+import { getCollection } from "astro:content";
+import { Icon } from "astro-icon/components";
+import ImageWrapper from "@components/misc/ImageWrapper.astro";
+import MainGridLayout from "../layouts/MainGridLayout.astro";
+import { profileConfig } from "../config";
+import { url } from "../utils/url-utils";
+import HonorWall from "../components/HonorWall.astro";
+import { parseHonors } from "../utils/honors";
+import honorsSource from "../data/honors.md?raw";
+
+const posts = await getCollection("posts", ({ data }) => !data.draft && data.hidden !== true);
+const tags = new Set(posts.flatMap(({ data }) => data.tags ?? []));
+const categories = new Set(posts.map(({ data }) => data.category).filter(Boolean));
+const socialLinks = profileConfig.links;
+const contentFocus = ["技术笔记", "生活记录"];
+
+const interests = [
+    { icon: "material-symbols:terminal-rounded", label: "写代码", title: "把想法变成能跑的东西", text: "写前端、折腾部署、踩坑再填坑。遇到值得记的就顺手写下来。", tone: "ink" },
+    { icon: "material-symbols:explore-rounded", label: "读与看", title: "在别人的想法里搭积木", text: "看书、看纪录片、听播客，遇到好句子就抄下来，标注来源。", tone: "blue" },
+    { icon: "material-symbols:local-fire-department-rounded", label: "折腾", title: "给生活加一点新东西", text: "做饭、骑车、跑半马，把平凡的日子过得有点意思。", tone: "gold" },
+];
+const honors = parseHonors(honorsSource);
+---
+
+<MainGridLayout title={`关于 ${profileConfig.name}`} description={`${profileConfig.name} 的个人介绍`}>
+    <div class="about-page">
+        <section class="about-intro" aria-labelledby="about-title">
+            <div class="about-portrait-column">
+                <div class="about-portrait-frame">
+                    <div class="about-portrait"><ImageWrapper src={profileConfig.avatar || ""} alt={`${profileConfig.name} 的头像`} /></div>
+                    <span class="about-portrait-caption"><Icon name="fa6-brands:canadian-maple-leaf" /> {profileConfig.name}</span>
+                </div>
+                <div class="about-status"><span></span> 今天也在认真生活中</div>
+            </div>
+            <div class="about-intro-copy">
+                <div class="about-kicker"><Icon name="fa6-brands:canadian-maple-leaf" /> ABOUT {profileConfig.name.toUpperCase()} <span>档案 · 01</span></div>
+                <h1 id="about-title">你好，我是 <span>{profileConfig.name}</span><Icon name="fa6-brands:canadian-maple-leaf" /></h1>
+                <p class="about-lead">{profileConfig.bio} 这里是我的个人空间，存放技术笔记、生活片段和一些还没想明白的问题。</p>
+                <p class="about-copy">如果你也在折腾代码或者认真过日子，欢迎来逛逛。这里没有长篇大论，只有一次次真实的尝试和踩坑记录。</p>                <div class="about-profile-details">
+                    {(profileConfig.location || profileConfig.occupation) && <span class="about-origin-line">
+                        {profileConfig.location && <span><Icon name="material-symbols:location-on-rounded" /> 地址 <b>{profileConfig.location}</b></span>}
+                        {profileConfig.location && profileConfig.occupation && <i>·</i>}
+                        {profileConfig.occupation && <span><Icon name="material-symbols:computer-outline-rounded" /> 专业 <b>{profileConfig.occupation}</b></span>}
+                    </span>}
+                    <span><Icon name="material-symbols:person-outline-rounded" /> 身份 <b>博客作者</b></span>
+                    <span><Icon name="material-symbols:edit-note-rounded" /> 记录 <b>日常与灵感</b></span>
+                    <span><Icon name="material-symbols:interests-rounded" /> 喜欢 <b>阅读、音乐、创作</b></span>
+                    <span><Icon name="material-symbols:school-outline-rounded" /> 正在 <b>持续学习，保持进步</b></span>
+                </div>
+                <div class="about-facts">
+                    <span><Icon name="material-symbols:article-outline-rounded" /> <strong>{posts.length}</strong> 篇文章</span>
+                    <span><Icon name="material-symbols:label-outline-rounded" /> <strong>{tags.size}</strong> 个标签</span>
+                    <span><Icon name="material-symbols:category-outline-rounded" /> <strong>{categories.size}</strong> 个分类</span>
+                </div>
+                <div class="about-bottom-row">
+                    <div class="about-focus"><span>这里会写</span>{contentFocus.map((focus) => <b>{focus}</b>)}</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="contact-section" aria-labelledby="contact-title">
+            <div class="contact-heading"><span>FIND ME ELSEWHERE</span><p>欢迎来这里找我聊天</p></div>
+            <nav class="contact-icons" aria-label="联系方式">
+                {socialLinks.map((link) => <a class:list={["contact-icon-link", `social-${link.name.toLowerCase()}`]} href={link.url} target="_blank" rel="me noopener noreferrer" aria-label={link.name} title={link.name}><Icon name={link.icon} /></a>)}
+            </nav>
+        </section>
+
+        <section class="about-section" aria-labelledby="interest-title">
+            <div class="about-section-heading"><div><span>MY FAVORITES</span><h2 id="interest-title"><Icon name="fa6-brands:canadian-maple-leaf" /> 我的兴趣清单</h2></div><p>喜欢的事情，值得认真记下来</p></div>
+            <div class="interest-list">
+                {interests.map((item, index) => <article class:list={["interest-item", item.tone]}>
+                    <div class="interest-icon"><Icon name={item.icon} /></div>
+                    <div class="interest-number">0{index + 1} <span>{item.label}</span></div>
+                    <h3>{item.title}</h3>
+                    <p>{item.text}</p>
+                    <Icon class="interest-arrow" name="material-symbols:arrow-forward-rounded" />
+                </article>)}
+            </div>
+        </section>
+
+        <HonorWall honors={honors} />
+
+        <section class="about-note" aria-label="最近状态">
+            <Icon name="material-symbols:edit-note-rounded" /> <span>今天也没有什么大事，继续写一点自己喜欢的东西。</span>
+            <a href={url("archive/")}>去看文章 <Icon name="material-symbols:arrow-forward-rounded" /></a>
+        </section>
+    </div>
+</MainGridLayout>
+
+<style>
+    .about-page { width: 100%; max-width: 68rem; margin: 0 auto; color: var(--deep-text); }
+    .about-intro { display: grid; grid-template-columns: minmax(15rem, 0.72fr) minmax(0, 1.7fr); align-items: center; gap: 3rem; min-height: 25rem; padding: 2rem 1.5rem 2.25rem; border-bottom: 1px dashed color-mix(in srgb, var(--deep-text) 16%, transparent); }
+    .about-portrait-column { display: grid; justify-items: center; gap: 0.85rem; }
+    .about-portrait-frame { position: relative; padding: 0.7rem 0.7rem 2rem; border: 1px solid color-mix(in srgb, var(--deep-text) 9%, transparent); border-radius: 1.1rem; background: color-mix(in srgb, var(--card-bg) 72%, transparent); box-shadow: 0 1rem 2.5rem color-mix(in srgb, var(--deep-text) 11%, transparent); transform: rotate(-2deg); transition: transform 220ms ease, box-shadow 220ms ease; }
+    .about-portrait-frame:hover { transform: rotate(0) translateY(-3px); box-shadow: 0 1.2rem 2.8rem color-mix(in srgb, var(--deep-text) 15%, transparent); }
+    .about-portrait { width: min(17rem, 28vw); aspect-ratio: 0.92; overflow: hidden; border-radius: 0.8rem; background: color-mix(in srgb, var(--primary) 12%, var(--card-bg)); }
+    .about-portrait :global(> div), .about-portrait :global(img) { width: 100%; height: 100%; }
+    .about-portrait :global(img) { object-fit: cover; }
+    .about-portrait-caption { position: absolute; right: 0; bottom: 0.55rem; left: 0; display: flex; align-items: center; justify-content: center; gap: 0.3rem; color: color-mix(in srgb, var(--primary) 74%, var(--deep-text)); font-size: 0.7rem; font-weight: 800; }
+    .about-portrait-caption :global(svg) { width: 0.8rem; height: 0.8rem; }
+    .about-status { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.38rem 0.65rem; border: 1px dashed color-mix(in srgb, var(--primary) 28%, transparent); border-radius: 999px; color: color-mix(in srgb, var(--deep-text) 60%, transparent); background: color-mix(in srgb, var(--card-bg) 44%, transparent); font-size: 0.65rem; }
+    .about-status span { width: 0.42rem; aspect-ratio: 1; border-radius: 50%; background: #6fb68b; box-shadow: 0 0 0 0.2rem color-mix(in srgb, #6fb68b 15%, transparent); }
+    .about-intro-copy { min-width: 0; }
+    .about-kicker { display: inline-flex; align-items: center; gap: 0.4rem; color: color-mix(in srgb, var(--primary) 74%, var(--deep-text)); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; }
+    .about-kicker span { padding: 0.2rem 0.45rem; border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent); border-radius: 999px; font-size: 0.58rem; letter-spacing: 0.04em; }
+    .about-kicker :global(svg) { width: 0.9rem; height: 0.9rem; }
+    .about-intro h1 { display: flex; align-items: center; flex-wrap: wrap; gap: 0.22em; margin: 0.65rem 0 0.9rem; color: var(--deep-text); font-size: 2.5rem; font-weight: 850; line-height: 1.15; }
+    .about-intro h1 span { color: var(--primary); }
+    .about-intro h1 :global(svg) { width: 2rem; height: 2rem; color: var(--primary); }
+    .about-lead { max-width: 42rem; margin: 0; color: color-mix(in srgb, var(--deep-text) 76%, transparent); font-size: 1.08rem; line-height: 1.7; }
+    .about-copy { max-width: 42rem; margin: 0.45rem 0 0; color: color-mix(in srgb, var(--deep-text) 55%, transparent); font-size: 0.85rem; line-height: 1.7; }
+    .about-profile-details { display: grid; gap: 0.4rem; margin-top: 1rem; color: color-mix(in srgb, var(--deep-text) 62%, transparent); font-size: 0.73rem; }
+    .about-profile-details span { display: flex; align-items: center; gap: 0.45rem; }
+    .about-profile-details .about-origin-line { flex-wrap: wrap; gap: 0.55rem; }
+    .about-origin-line > span { display: inline-flex; align-items: center; gap: 0.35rem; }
+    .about-origin-line > i { color: color-mix(in srgb, var(--deep-text) 32%, transparent); font-style: normal; }
+    .about-profile-details :global(svg) { width: 0.95rem; height: 0.95rem; color: var(--primary); }
+    .about-profile-details b { color: color-mix(in srgb, var(--deep-text) 82%, transparent); font-weight: 700; }
+    .about-facts { display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem; margin-top: 1.15rem; color: color-mix(in srgb, var(--deep-text) 64%, transparent); font-size: 0.72rem; font-weight: 700; }
+    .about-facts span { display: inline-flex; align-items: center; gap: 0.35rem; }
+    .about-facts strong { color: var(--primary); }
+    .about-facts :global(svg) { width: 0.95rem; height: 0.95rem; color: var(--primary); }
+    .about-bottom-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.7rem; margin-top: 0.85rem; }
+    .about-focus { display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem; color: color-mix(in srgb, var(--deep-text) 52%, transparent); font-size: 0.64rem; }
+    .about-focus b { padding: 0.22rem 0.45rem; border-radius: 999px; color: color-mix(in srgb, var(--primary) 75%, var(--deep-text)); background: color-mix(in srgb, var(--primary) 9%, transparent); font-size: 0.62rem; }
+    .about-section { margin-top: 2.8rem; }
+    .about-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; padding: 0 0.25rem 0.85rem; border-bottom: 1px dashed color-mix(in srgb, var(--deep-text) 16%, transparent); }
+    .about-section-heading span { color: color-mix(in srgb, var(--primary) 70%, var(--deep-text)); font-size: 0.68rem; font-weight: 800; letter-spacing: 0.12em; }
+    .about-section-heading h2 { display: flex; align-items: center; gap: 0.45rem; margin: 0.3rem 0 0; color: var(--deep-text); font-size: 1.45rem; }
+    .about-section-heading h2 :global(svg) { width: 1.15rem; height: 1.15rem; color: var(--primary); }
+    .about-section-heading p { margin: 0; color: color-mix(in srgb, var(--deep-text) 48%, transparent); font-size: 0.72rem; }
+    .contact-section { display: flex; align-items: center; gap: 1rem; margin-top: 1.6rem; }
+    .contact-heading { display: grid; gap: 0.12rem; color: color-mix(in srgb, var(--deep-text) 48%, transparent); }
+    .contact-heading span { color: color-mix(in srgb, var(--primary) 72%, var(--deep-text)); font-size: 0.58rem; font-weight: 800; letter-spacing: 0.08em; }
+    .contact-heading p { margin: 0; font-size: 0.62rem; }
+    .contact-icons { display: flex; align-items: center; gap: 0.55rem; }
+    .contact-icon-link { display: grid; place-items: center; width: 2.35rem; aspect-ratio: 1; border: 1px solid color-mix(in srgb, var(--deep-text) 10%, transparent); border-radius: 50%; color: color-mix(in srgb, var(--deep-text) 72%, transparent); background: color-mix(in srgb, var(--card-bg) 72%, transparent); box-shadow: 0 0.25rem 0.75rem color-mix(in srgb, var(--deep-text) 7%, transparent); transition: transform 160ms ease, color 160ms ease, background 160ms ease; }
+    .contact-icon-link:hover { transform: translateY(-3px); background: var(--card-bg); }
+    .contact-icon-link :global(svg) { width: 1.05rem; height: 1.05rem; }
+    .contact-icon-link.social-bilibili { color: #1597d5; }
+    .contact-icon-link.social-小红书 { color: #e4434d; }
+    .contact-icon-link.social-github { color: var(--deep-text); }
+    .interest-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.8rem; padding-top: 1rem; }
+    .interest-item { position: relative; min-height: 10.5rem; padding: 1.1rem; border: 1px solid color-mix(in srgb, var(--deep-text) 11%, transparent); border-radius: 1rem; background: color-mix(in srgb, var(--card-bg) 44%, transparent); transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease; }
+    .interest-item:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--primary) 32%, transparent); box-shadow: 0 0.7rem 1.5rem color-mix(in srgb, var(--deep-text) 6%, transparent); }
+    .interest-icon { display: grid; place-items: center; width: 2rem; aspect-ratio: 1; border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent); border-radius: 0.65rem; color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
+    .interest-icon :global(svg) { width: 1.1rem; height: 1.1rem; }
+    .interest-number { margin-top: 0.7rem; color: color-mix(in srgb, var(--primary) 68%, var(--deep-text)); font-size: 0.6rem; font-weight: 800; letter-spacing: 0.08em; }
+    .interest-number span { margin-left: 0.25rem; color: color-mix(in srgb, var(--deep-text) 45%, transparent); }
+    .interest-item h3 { margin: 0.3rem 0 0; color: var(--deep-text); font-size: 0.98rem; }
+    .interest-item p { max-width: 28rem; margin: 0.35rem 1.2rem 0 0; color: color-mix(in srgb, var(--deep-text) 60%, transparent); font-size: 0.73rem; line-height: 1.55; }
+    .interest-arrow { position: absolute; right: 1rem; bottom: 1rem; width: 1rem; height: 1rem; color: color-mix(in srgb, var(--primary) 74%, transparent); }
+    .interest-item.ink .interest-icon { color: oklch(0.40 0.10 255); background: oklch(0.945 0.025 255); }
+    .interest-item.blue .interest-icon { color: oklch(0.48 0.10 215); background: oklch(0.945 0.025 215); }
+    .interest-item.gold .interest-icon { color: oklch(0.62 0.13 72); background: oklch(0.95 0.035 72); }
+    .about-note { display: flex; align-items: center; gap: 0.55rem; margin-top: 1rem; padding: 0.65rem 0.85rem; border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent); border-radius: 999px; color: color-mix(in srgb, var(--deep-text) 58%, transparent); background: color-mix(in srgb, var(--card-bg) 40%, transparent); font-size: 0.72rem; }
+    .about-note > :global(svg) { width: 1rem; height: 1rem; color: var(--primary); }
+    .about-note a { display: inline-flex; align-items: center; gap: 0.25rem; margin-left: auto; color: var(--primary); font-weight: 800; text-decoration: none; white-space: nowrap; }
+    .about-note a :global(svg) { width: 0.85rem; height: 0.85rem; }
+    @media (max-width: 767px) {
+        .about-intro { grid-template-columns: 1fr; gap: 1.6rem; padding: 1.4rem 0.25rem 1.3rem; }
+        .about-portrait { width: min(15rem, 60vw); }
+        .about-intro-copy { text-align: center; }
+        .about-kicker, .about-facts, .about-profile-details span, .about-bottom-row { justify-content: center; }
+        .about-intro h1 { justify-content: center; font-size: 2.35rem; }
+        .about-lead, .about-copy { margin-left: auto; margin-right: auto; }
+        .about-focus { justify-content: center; }
+        .about-section { margin-top: 2rem; }
+        .contact-section { margin-top: 1.3rem; }
+        .about-section-heading { align-items: flex-start; flex-direction: column; gap: 0.4rem; }
+        .contact-section { justify-content: center; flex-wrap: wrap; }
+        .interest-list { grid-template-columns: 1fr; }
+        .about-note { align-items: flex-start; border-radius: 0.85rem; }
+        .about-note a { margin-left: 0; }
+    }
+</style>

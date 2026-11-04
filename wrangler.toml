@@ -1,0 +1,26 @@
+# Cloudflare Pages 部署配置
+#
+# 用途：
+#   1. 声明 Pages 项目的输出目录（dist/）与兼容标志。
+#   2. 绑定留言板所用的 D1 数据库（functions/api/twikoo/ 使用）。
+#
+# 部署命令（在项目根目录执行）：
+#   pnpm build
+#   npx wrangler pages deploy dist
+#
+# 关于 nodejs_compat：
+#   博客自己的 Pages Function 不需要它，但 Twikoo 适配器内部用到了 node:fs/promises、
+#   node:crypto 等 Node 内建模块，必须开启，否则构建会报
+#   "The package \"timers\" wasn't found on the file system but is built into node."。
+
+name = "fengzhan-blog"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "./dist"
+
+# 留言板数据库（Twikoo）。用下面的命令创建并把返回的 database_id 填进来：
+#   npx wrangler d1 create twikoo
+[[d1_databases]]
+binding = "DB"
+database_name = "twikoo"
+database_id = "00000000-0000-0000-0000-000000000000"

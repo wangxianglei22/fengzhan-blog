@@ -1,0 +1,79 @@
+---
+import { Icon } from "astro-icon/components";
+import { quoteItems } from "../../data/quotes";
+
+const now = new Date();
+const year = now.getFullYear();
+const dayOfYear = Math.floor((now.getTime() - new Date(year, 0, 1).getTime()) / 86400000) + 1;
+const daysInYear = new Date(year, 11, 31).getDate() === 31 && new Date(year, 1, 29).getDate() === 29 ? 366 : 365;
+const progress = Math.round((dayOfYear / daysInYear) * 1000) / 10;
+const dateText = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" }).format(now);
+---
+
+<daily-notebook class="notebook-widget card-base" aria-labelledby="notebook-title">
+    <div class="widget-topline">
+        <div class="widget-title"><span class="widget-icon"><Icon name="material-symbols:edit-note-rounded" /></span><h2 id="notebook-title">今日手账</h2></div>
+        <span class="widget-index">01</span>
+    </div>
+    <div class="notebook-date">{dateText}</div>
+    <div class="notebook-clock" data-clock>--:--<small> : --</small></div>
+    <div class="notebook-progress-label"><span>{year} 年已走过</span><strong>{progress}%</strong></div>
+    <div class="notebook-progress"><span style={`width: ${progress}%`}></span></div>
+    <button type="button" class="notebook-note" data-notebook-quote aria-label="换一句今日语录">
+        <span data-notebook-quote-text>{quoteItems[0]?.text || "今天也要好好吃饭，好好睡觉。"}</span>
+        <Icon name="material-symbols:refresh-rounded" />
+    </button>
+    <a class="notebook-link" href="/archive/">看看我的文章 <Icon name="material-symbols:arrow-forward-rounded" /></a>
+</daily-notebook>
+
+<script is:inline define:vars={{ notebookQuotes: quoteItems.map((quote) => quote.text) }}>
+	class DailyNotebook extends HTMLElement {
+		quoteIndex = 0;
+
+		connectedCallback() {
+			if (this.dataset.ready === "true") return;
+			this.dataset.ready = "true";
+			this.querySelector("[data-notebook-quote]")?.addEventListener("click", () => {
+				const button = this.querySelector("[data-notebook-quote]");
+				const text = this.querySelector("[data-notebook-quote-text]");
+				if (!button || !text || notebookQuotes.length < 2) return;
+				let nextIndex = this.quoteIndex;
+				while (nextIndex === this.quoteIndex) nextIndex = Math.floor(Math.random() * notebookQuotes.length);
+				this.quoteIndex = nextIndex;
+				button.classList.add("is-changing");
+				window.setTimeout(() => {
+					text.textContent = notebookQuotes[this.quoteIndex];
+					button.classList.remove("is-changing");
+				}, 130);
+			});
+		}
+	}
+
+	if (!customElements.get("daily-notebook")) customElements.define("daily-notebook", DailyNotebook);
+</script>
+
+<style>
+    .notebook-widget { padding: 1rem; }
+    .widget-topline, .widget-title, .notebook-progress-label { display: flex; align-items: center; }
+    .widget-topline { justify-content: space-between; padding-bottom: 0.75rem; border-bottom: 1px dashed color-mix(in srgb, var(--deep-text) 14%, transparent); }
+    .widget-title { gap: 0.55rem; }
+    .widget-title h2 { margin: 0; color: var(--deep-text); font-size: 1.08rem; }
+    .widget-icon { display: grid; place-items: center; width: 1.9rem; aspect-ratio: 1; border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent); border-radius: 0.65rem; color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
+    .widget-icon :global(svg) { width: 1.1rem; height: 1.1rem; }
+    .widget-index { padding: 0.15rem 0.45rem; border: 1px solid color-mix(in srgb, var(--primary) 15%, transparent); border-radius: 0.45rem; color: var(--primary); font-size: 0.65rem; font-weight: 800; }
+    .notebook-date { margin-top: 0.8rem; color: color-mix(in srgb, var(--deep-text) 60%, transparent); font-size: 0.78rem; }
+    .notebook-clock { margin-top: 0.12rem; color: var(--deep-text); font-size: 2.3rem; font-weight: 800; letter-spacing: 0.02em; line-height: 1.15; }
+    .notebook-clock small { color: var(--primary); font-size: 0.85rem; }
+    .notebook-progress-label { justify-content: space-between; margin-top: 0.8rem; color: color-mix(in srgb, var(--deep-text) 60%, transparent); font-size: 0.72rem; }
+    .notebook-progress-label strong { color: var(--primary); }
+    .notebook-progress { height: 0.38rem; margin-top: 0.35rem; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--primary) 12%, transparent); }
+    .notebook-progress span { display: block; height: 100%; border-radius: inherit; background: color-mix(in srgb, var(--primary) 55%, white); }
+    .notebook-note { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 0.5rem; margin-top: 0.85rem; padding: 0.7rem 0.75rem; border: 1px dashed color-mix(in srgb, var(--deep-text) 15%, transparent); border-radius: 0.75rem; color: color-mix(in srgb, var(--deep-text) 68%, transparent); background: color-mix(in srgb, var(--primary) 5%, transparent); font: inherit; font-size: 0.78rem; line-height: 1.5; text-align: left; cursor: pointer; transition: transform 160ms ease, border-color 160ms ease, opacity 160ms ease; }
+    .notebook-note:hover { border-color: color-mix(in srgb, var(--primary) 35%, transparent); transform: translateY(-1px); }
+    .notebook-note.is-changing { opacity: 0.45; transform: translateY(-2px); }
+    .notebook-note :global(svg) { flex: 0 0 auto; color: var(--primary); transition: transform 160ms ease; }
+    .notebook-note:hover :global(svg) { transform: rotate(25deg); }
+    .notebook-link { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.75rem; padding: 0.55rem 0.7rem; border: 1px solid color-mix(in srgb, var(--primary) 15%, transparent); border-radius: 0.7rem; color: color-mix(in srgb, var(--deep-text) 72%, transparent); font-size: 0.75rem; text-decoration: none; transition: color 160ms ease, border-color 160ms ease, transform 160ms ease; }
+    .notebook-link:hover { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 42%, transparent); transform: translateY(-1px); }
+    .notebook-link :global(svg) { color: var(--primary); }
+</style>

@@ -1,0 +1,244 @@
+---
+import guestbookSource from "../data/guestbook.md?raw";
+import { parseGuestbook } from "../utils/guestbook";
+import { url } from "../utils/url-utils";
+const guestbook = parseGuestbook(guestbookSource);
+const configured = Boolean(guestbook.envId.trim());
+---
+
+<section class="guestbook-panel" aria-labelledby="guestbook-title">
+	<div class="guestbook-heading">
+		<div>
+			<span class="guestbook-kicker">WALL OF WORDS</span>
+			<h1 id="guestbook-title">{guestbook.title}</h1>
+		</div>
+		<p>{guestbook.description}</p>
+	</div>
+
+	{configured ? <div
+		id="twikoo"
+		class="twikoo-container"
+		data-env-id={guestbook.envId}
+		data-client-url={url("/vendor/twikoo-2.0.17.min.js")}
+		aria-live="polite"
+	></div> : <p class="guestbook-error">留言板尚未配置。请在 src/data/guestbook.md 中填写你自己的 Twikoo 服务地址。</p>}
+</section>
+
+<script>
+	type TwikooInitOptions = {
+		envId: string;
+		el: string;
+		lang: string;
+		showAdminEntry?: boolean;
+	};
+	type TwikooInitializer = (options: TwikooInitOptions) => Promise<unknown> | unknown;
+	type TwikooClient = TwikooInitializer | {
+		init?: TwikooInitializer;
+		default?: TwikooInitializer;
+	};
+
+	declare global {
+		interface Window {
+			twikoo?: TwikooClient;
+			__blogTwikooStyle?: string;
+		}
+	}
+
+	let twikooLoadPromise: Promise<void> | undefined;
+
+	const getClient = (): TwikooClient | undefined => {
+		const scopedWindow = window as unknown as { twikoo?: TwikooClient };
+		return scopedWindow.twikoo;
+	};
+
+	const getInitializer = () => {
+		const client = getClient();
+		if (typeof client === "function") return client;
+		return client?.init ?? client?.default;
+	};
+
+	const isTwikooStylesheet = (style: HTMLStyleElement) => {
+		const css = style.textContent ?? "";
+		return css.includes(".twikoo{") || css.includes(".twikoo ") || css.includes(".OwO");
+	};
+
+	const preserveTwikooStyles = () => {
+		const existingStyle = Array.from(document.head.querySelectorAll<HTMLStyleElement>("style[data-twikoo-style]")).find(isTwikooStylesheet)
+			?? Array.from(document.head.querySelectorAll<HTMLStyleElement>("style")).find(isTwikooStylesheet);
+		if (existingStyle) {
+			existingStyle.setAttribute("data-twikoo-style", "true");
+			window.__blogTwikooStyle = existingStyle.textContent ?? window.__blogTwikooStyle;
+			return;
+		}
+		if (window.__blogTwikooStyle) {
+			const style = document.createElement("style");
+			style.setAttribute("data-twikoo-style", "true");
+			style.textContent = window.__blogTwikooStyle;
+			document.head.append(style);
+		}
+	};
+
+	const loadTwikoo = () => {
+		preserveTwikooStyles();
+		if (getInitializer()) return Promise.resolve();
+		if (!twikooLoadPromise) {
+			twikooLoadPromise = new Promise<void>((resolve, reject) => {
+				const script = document.createElement("script");
+				script.src = document.querySelector<HTMLElement>("#twikoo")?.dataset.clientUrl ?? "";
+				if (!script.src) {
+					reject(new Error("Twikoo client URL is missing"));
+					return;
+				}
+				script.async = true;
+			script.onload = () => {
+				document.head.querySelectorAll<HTMLStyleElement>("style:not([data-twikoo-style])").forEach((style) => {
+					if (isTwikooStylesheet(style)) {
+						style.setAttribute("data-twikoo-style", "true");
+					}
+				});
+				preserveTwikooStyles();
+				resolve();
+			};
+				script.onerror = () => reject(new Error("Twikoo client failed to load"));
+				document.head.append(script);
+			});
+		}
+		return twikooLoadPromise;
+	};
+
+	/**
+	 * envId 可以写成绝对地址（https://example.com/api/twikoo），
+	 * 也可以写成站内相对路径（/api/twikoo）。相对路径会按当前站点补全，
+	 * 这样换域名时只要改 src/data/guestbook.md 里的相对路径即可。
+	 */
+	const resolveEnvId = (raw: string) => {
+		const value = raw.trim();
+		if (!value) return "";
+		if (/^https?:\/\//i.test(value)) return value;
+		if (value.startsWith("/")) return new URL(value, window.location.origin).toString();
+		return "";
+	};
+
+	const mountTwikoo = async () => {
+		const element = document.querySelector<HTMLElement>("#twikoo");
+		if (!element || !element.dataset.envId?.trim() || element.dataset.loading === "true") return;
+		if (element.dataset.initialized === "true") {
+			preserveTwikooStyles();
+			return;
+		}
+		element.dataset.loading = "true";
+
+		try {
+			await loadTwikoo();
+			preserveTwikooStyles();
+			const initialize = getInitializer();
+			if (typeof initialize !== "function") {
+				const exports = Object.keys(getClient() ?? {}).join(", ") || "none";
+				throw new Error(`Twikoo init export unavailable (exports: ${exports})`);
+			}
+			await initialize({
+				envId: resolveEnvId(element.dataset.envId ?? ""),
+				el: "#twikoo",
+				lang: "zh-CN",
+				showAdminEntry: new URLSearchParams(window.location.search).get("admin") === "1",
+			});
+			element.dataset.initialized = "true";
+		} catch (error) {
+			console.error("Twikoo initialization failed:", error);
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			const message = document.createElement("p");
+			message.className = "guestbook-error";
+			message.setAttribute("role", "status");
+			message.textContent = `留言组件加载失败：${errorMessage}`;
+			element.replaceChildren(message);
+		} finally {
+			delete element.dataset.loading;
+		}
+	};
+
+	mountTwikoo();
+	document.addEventListener("astro:page-load", mountTwikoo);
+</script>
+
+<style>
+	.guestbook-panel {
+		width: 100%;
+		max-width: 68rem;
+		margin: 0 auto;
+		padding: 2rem clamp(0.25rem, 2vw, 1.5rem) 2.5rem;
+		color: var(--deep-text);
+	}
+
+	.guestbook-heading {
+		display: flex;
+		align-items: end;
+		justify-content: space-between;
+		gap: 1rem;
+		padding-bottom: 1rem;
+		border-bottom: 1px dashed color-mix(in srgb, var(--deep-text) 16%, transparent);
+	}
+
+	.guestbook-kicker {
+		color: color-mix(in srgb, var(--primary) 72%, var(--deep-text));
+		font-size: 0.68rem;
+		font-weight: 800;
+		letter-spacing: 0.13em;
+	}
+
+	.guestbook-heading h1 {
+		margin: 0.3rem 0 0;
+		font-size: 2rem;
+		font-weight: 850;
+	}
+
+	.guestbook-heading p {
+		margin: 0;
+		color: color-mix(in srgb, var(--deep-text) 52%, transparent);
+		font-size: 0.78rem;
+	}
+
+	.twikoo-container {
+		margin-top: 1.5rem;
+		padding: clamp(0.8rem, 2vw, 1.5rem);
+		border: 1px solid color-mix(in srgb, var(--deep-text) 10%, transparent);
+		border-radius: 1rem;
+		background: color-mix(in srgb, var(--card-bg) 55%, transparent);
+	}
+
+	/* Twikoo groups browser, operating system, and region into this metadata row. */
+	:global(#twikoo .tk-extras) {
+		display: none;
+	}
+
+	/* Keep the comment layout stable while Twikoo's injected stylesheet loads. */
+	:global(#twikoo .tk-avatar) {
+		width: 2.5rem;
+		height: 2.5rem;
+		flex: 0 0 2.5rem;
+		overflow: hidden;
+		border-radius: 0.35rem;
+	}
+
+	:global(#twikoo .tk-avatar img),
+	:global(#twikoo .tk-avatar svg) {
+		width: 100%;
+		height: 100%;
+		max-width: 100%;
+		object-fit: cover;
+	}
+
+	.guestbook-error {
+		margin: 0;
+		padding: 1rem;
+		border: 1px dashed color-mix(in srgb, var(--primary) 32%, transparent);
+		border-radius: 0.75rem;
+		color: color-mix(in srgb, var(--deep-text) 76%, transparent);
+		background: color-mix(in srgb, var(--primary) 5%, transparent);
+		font-size: 0.85rem;
+	}
+
+	@media (max-width: 767px) {
+		.guestbook-heading { align-items: flex-start; flex-direction: column; }
+		.guestbook-heading h1 { font-size: 1.75rem; }
+	}
+</style>

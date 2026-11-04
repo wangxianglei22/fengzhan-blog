@@ -1,0 +1,23 @@
+---
+import { Icon } from "astro-icon/components";
+import MusicPlayer from "../components/MusicPlayer.astro";
+import MainGridLayout from "../layouts/MainGridLayout.astro";
+import { parseMusic } from "../utils/music";
+import musicSource from "../data/music.md?raw";
+
+const tracks = parseMusic(musicSource);
+---
+
+<MainGridLayout title="音乐" description="我的音乐收藏">
+	<div class="music-page-intro">
+		<a href="/" aria-label="返回首页"><Icon name="material-symbols:arrow-back-rounded" /> 返回首页</a>
+	</div>
+	<MusicPlayer tracks={tracks} />
+</MainGridLayout>
+
+<style>
+	.music-page-intro { display: flex; justify-content: flex-end; margin: 0 0 0.65rem; }
+	.music-page-intro a { display: inline-flex; align-items: center; gap: 0.3rem; color: color-mix(in srgb, var(--deep-text) 55%, transparent); font-size: 0.72rem; text-decoration: none; }
+	.music-page-intro a:hover { color: var(--primary); }
+	.music-page-intro :global(svg) { width: 0.95rem; height: 0.95rem; }
+</style>

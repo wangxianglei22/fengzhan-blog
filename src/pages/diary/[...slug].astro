@@ -1,0 +1,53 @@
+---
+import { getCollection } from "astro:content";
+import { Icon } from "astro-icon/components";
+import MainGridLayout from "../../layouts/MainGridLayout.astro";
+import Markdown from "../../components/misc/Markdown.astro";
+import ImageWrapper from "../../components/misc/ImageWrapper.astro";
+import { url } from "../../utils/url-utils";
+
+export async function getStaticPaths() {
+    const entries = await getCollection("diary", ({ data }) => !data.draft);
+    return entries.map((entry) => ({ params: { slug: entry.slug }, props: { entry } }));
+}
+
+const { entry } = Astro.props;
+const { Content, headings } = await entry.render();
+const dateLabel = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" }).format(entry.data.date);
+---
+
+<MainGridLayout title={entry.data.title} description={entry.data.excerpt} headings={headings} setOGTypeArticle={true}>
+    <div class="diary-detail">
+        <div class="diary-detail-actions">
+            <a href={url("/diary/")} class="diary-back-link"><Icon name="material-symbols:arrow-back-rounded" /> 返回日记</a>
+            <span class="diary-detail-label">{entry.data.mood} {entry.data.moodLabel}</span>
+        </div>
+        <article class="diary-detail-card card-base">
+            {entry.data.cover && <ImageWrapper src={entry.data.cover} basePath="assets/images" alt={entry.data.title} class="diary-detail-cover" />}
+            <div class="diary-detail-body">
+                <div class="diary-detail-date"><time datetime={entry.data.date.toISOString()}>{dateLabel}</time><span>·</span><span>生活记录</span></div>
+                <h1>{entry.data.title}</h1>
+                {entry.data.excerpt && <p class="diary-detail-excerpt">{entry.data.excerpt}</p>}
+                <Markdown class="markdown-content diary-markdown"><Content /></Markdown>
+            </div>
+        </article>
+    </div>
+</MainGridLayout>
+
+<style>
+    .diary-detail { width: 100%; max-width: 68rem; margin: 0 auto; }
+    .diary-detail-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.8rem; }
+    .diary-back-link { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.5rem 0.75rem; border: 1px solid var(--line-divider); border-radius: 999px; color: color-mix(in srgb, var(--deep-text) 72%, transparent); background: var(--card-bg); font-size: 0.74rem; font-weight: 500; text-decoration: none; transition: transform 160ms ease, color 160ms ease; }
+    .diary-back-link:hover { color: var(--primary); transform: translateX(-2px); }
+    .diary-back-link :global(svg) { width: 1rem; height: 1rem; }
+    .diary-detail-label { color: var(--primary); font-size: 0.75rem; font-weight: 500; }
+    .diary-detail-card { overflow: hidden; }
+    .diary-detail-cover { width: 100%; max-height: 22rem; }
+    .diary-detail-cover :global(img) { max-height: 22rem; object-fit: cover; }
+    .diary-detail-body { padding: 1.7rem clamp(1.1rem, 4vw, 3rem) 2.5rem; }
+    .diary-detail-date { display: flex; align-items: center; gap: 0.55rem; color: color-mix(in srgb, var(--deep-text) 50%, transparent); font-size: 0.75rem; }
+    .diary-detail-body h1 { margin: 0.7rem 0 0.55rem; color: var(--deep-text); font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 500; letter-spacing: -0.02em; line-height: 1.2; }
+    .diary-detail-excerpt { margin: 0 0 1.25rem; color: color-mix(in srgb, var(--deep-text) 58%, transparent); font-size: 0.9rem; line-height: 1.7; }
+    .diary-markdown { margin-top: 1.25rem; }
+    @media (max-width: 520px) { .diary-detail-actions { align-items: flex-start; flex-direction: column; } }
+</style>

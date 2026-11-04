@@ -1,0 +1,212 @@
+---
+import type { CollectionEntry } from "astro:content";
+import { Icon } from "astro-icon/components";
+import ImageWrapper from "./misc/ImageWrapper.astro";
+import { url } from "../utils/url-utils";
+
+interface Props {
+	entries: CollectionEntry<"diary">[];
+}
+
+const { entries } = Astro.props;
+const sortedEntries = [...entries].sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+const pinnedEntries = sortedEntries.filter((entry) => entry.data.pinned);
+const diaryData = sortedEntries.map((entry) => ({
+	href: url(`/diary/${entry.slug}/`),
+	title: entry.data.title,
+	date: entry.data.date.toISOString(),
+	mood: entry.data.mood,
+	moodLabel: entry.data.moodLabel,
+}));
+const initialDate = sortedEntries[0]?.data.date ?? new Date();
+const initialMonth = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(initialDate);
+const formatDate = (date: Date) => new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric" }).format(date);
+---
+
+<section class="diary-board" aria-labelledby="diary-board-title">
+    <header class="diary-heading">
+        <div>
+            <span class="diary-kicker">DAILY NOTES · 生活记录</span>
+            <h1 id="diary-board-title">日记</h1>
+            <p>把每天的心情，留在一个可以回看的地方。</p>
+        </div>
+        <div class="diary-heading-mark" aria-hidden="true"><span>日</span><small>DIARY</small></div>
+    </header>
+
+    <section class="diary-calendar card-base" aria-labelledby="diary-calendar-title">
+        <div class="diary-section-topline">
+            <div class="diary-section-title"><span class="diary-icon"><Icon name="material-symbols:calendar-month-rounded" /></span><div><span>MY MOOD CALENDAR</span><h2 id="diary-calendar-title">心情日历</h2></div></div>
+            <span class="diary-total">{sortedEntries.length} 篇记录</span>
+        </div>
+        <div class="diary-calendar-heading">
+            <button type="button" data-diary-prev aria-label="上个月"><Icon name="material-symbols:chevron-left-rounded" /></button>
+            <strong data-diary-month>{initialMonth}</strong>
+            <button type="button" data-diary-next aria-label="下个月"><Icon name="material-symbols:chevron-right-rounded" /></button>
+        </div>
+        <div class="diary-weekdays" aria-hidden="true">{["日", "一", "二", "三", "四", "五", "六"].map((day) => <span>{day}</span>)}</div>
+        <div class="diary-days" data-diary-days aria-live="polite"></div>
+        <div class="diary-calendar-note"><span><i class="mood-dot"><Icon name="fa6-brands:canadian-maple-leaf" /></i> 有记录的日子会留下心情</span><span>点击日期打开日记</span></div>
+    </section>
+
+    <section class="diary-pinned-section" aria-labelledby="diary-pinned-title">
+        <div class="diary-section-heading"><div><span>DEAR DIARY</span><h2 id="diary-pinned-title">置顶日记</h2></div><p>把想反复翻看的片段放在这里</p></div>
+        {pinnedEntries.length > 0 ? <div class="diary-pinned-window" data-pinned-window>
+            {pinnedEntries.map((entry, index) => <article class:list={["diary-pinned-card", { "is-visible": index < 3, "is-center": index === 1 }]} data-pinned-card={index}>
+                <a class="diary-cover" href={url(`/diary/${entry.slug}/`)} aria-label={`打开日记：${entry.data.title}`}>
+                    {entry.data.cover ? <ImageWrapper src={entry.data.cover} basePath="assets/images" alt={entry.data.title} /> : <div class="diary-cover-placeholder"><Icon name="material-symbols:edit-note-rounded" /><span>{entry.data.mood}</span></div>}
+                    <span class="diary-cover-overlay"><Icon name="material-symbols:arrow-outward-rounded" /></span>
+                </a>
+                <div class="diary-card-copy">
+                    <div class="diary-card-meta"><time datetime={entry.data.date.toISOString()}>{formatDate(entry.data.date)}</time><span>{entry.data.mood} {entry.data.moodLabel}</span></div>
+                    <h3><a href={url(`/diary/${entry.slug}/`)}>{entry.data.title}</a></h3>
+                    <p>{entry.data.excerpt || "今天也有一些值得写下来的小事。"}</p>
+                    <a class="diary-read-link" href={url(`/diary/${entry.slug}/`)}>查看日记 <Icon name="material-symbols:arrow-forward-rounded" /></a>
+                </div>
+            </article>)}
+        </div> : <div class="diary-empty">{sortedEntries.length === 0 ? "还没有日记，等第一篇记录出现吧。" : "还没有置顶日记。"}</div>}
+        {pinnedEntries.length > 3 && <div class="diary-pinned-controls"><button type="button" data-pinned-prev aria-label="上一组置顶日记"><Icon name="material-symbols:chevron-left-rounded" /></button><span>左右切换置顶日记</span><button type="button" data-pinned-next aria-label="下一组置顶日记"><Icon name="material-symbols:chevron-right-rounded" /></button></div>}
+    </section>
+</section>
+
+<script is:inline define:vars={{ diaryData }}>
+    const entries = diaryData;
+    const calendarDays = document.querySelector("[data-diary-days]");
+    const calendarLabel = document.querySelector("[data-diary-month]");
+    const previousMonth = document.querySelector("[data-diary-prev]");
+    const nextMonth = document.querySelector("[data-diary-next]");
+    const pinnedCards = [...document.querySelectorAll("[data-pinned-card]")];
+    const pinnedPrevious = document.querySelector("[data-pinned-prev]");
+    const pinnedNext = document.querySelector("[data-pinned-next]");
+    let pinnedStart = 0;
+    let viewDate = new Date(entries[0]?.date ?? new Date());
+    viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+
+    const pad = (value) => String(value).padStart(2, "0");
+    const dayKey = (year, month, day) => `${year}-${pad(month + 1)}-${pad(day)}`;
+    const entryForDate = (key) => entries.find((entry) => entry.date.slice(0, 10) === key);
+    const escapeHtml = (value) => String(value ?? "").replace(/[&<>\"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character] || character));
+
+    const renderPinnedCards = () => {
+        const count = pinnedCards.length;
+        if (!count) return;
+        pinnedCards.forEach((card) => {
+            const index = Number(card.dataset.pinnedCard);
+            const position = (index - pinnedStart + count) % count;
+            const visible = count <= 3 || position < 3;
+            card.classList.toggle("is-visible", visible);
+            card.classList.toggle("is-left", visible && position === 0);
+            card.classList.toggle("is-center", visible && position === 1);
+            card.classList.toggle("is-right", visible && position === 2);
+        });
+    };
+
+    const renderCalendar = () => {
+        if (!calendarDays || !calendarLabel) return;
+        const year = viewDate.getFullYear();
+        const month = viewDate.getMonth();
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const today = new Date();
+        const cells = [];
+        for (let index = 0; index < firstDay; index += 1) cells.push(null);
+        for (let day = 1; day <= daysInMonth; day += 1) cells.push(day);
+        while (cells.length % 7 !== 0) cells.push(null);
+        calendarLabel.textContent = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(viewDate);
+        calendarDays.innerHTML = cells.map((day) => {
+            if (!day) return '<span class="diary-day diary-day-empty" aria-hidden="true"></span>';
+            const key = dayKey(year, month, day);
+            const entry = entryForDate(key);
+            const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
+            const tag = entry ? "a" : "span";
+            const href = entry ? ` href="${escapeHtml(entry.href)}"` : "";
+            return `<${tag}${href} class="diary-day${entry ? " has-entry" : ""}${isToday ? " is-today" : ""}" aria-label="${key}${entry ? " 有日记" : ""}"><span class="diary-day-number">${day}</span>${entry ? `<span class="diary-day-mood" aria-hidden="true">${escapeHtml(entry.mood)}</span>` : ""}</${tag}>`;
+        }).join("");
+    };
+
+    previousMonth?.addEventListener("click", () => { viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1); renderCalendar(); });
+    nextMonth?.addEventListener("click", () => { viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1); renderCalendar(); });
+    pinnedPrevious?.addEventListener("click", () => { pinnedStart = (pinnedStart - 1 + pinnedCards.length) % pinnedCards.length; renderPinnedCards(); });
+    pinnedNext?.addEventListener("click", () => { pinnedStart = (pinnedStart + 1) % pinnedCards.length; renderPinnedCards(); });
+    renderCalendar();
+    renderPinnedCards();
+</script>
+
+<style>
+    .diary-board { width: 100%; max-width: 68rem; margin: 0 auto; color: var(--deep-text); font-family: inherit; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+    .diary-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: 1.2rem; padding: 0.4rem 0.35rem 1.2rem; border-bottom: 1px dashed color-mix(in srgb, var(--deep-text) 16%, transparent); }
+    .diary-kicker, .diary-section-heading span, .diary-section-title > div > span { color: color-mix(in srgb, var(--primary) 72%, var(--deep-text)); font-size: 0.64rem; font-weight: 700; letter-spacing: 0.08em; }
+    .diary-heading h1 { margin: 0.35rem 0 0; color: var(--deep-text); font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 500; letter-spacing: -0.035em; line-height: 1; }
+    .diary-heading p { margin: 0.55rem 0 0; color: color-mix(in srgb, var(--deep-text) 56%, transparent); font-size: 0.82rem; }
+    .diary-heading-mark { display: grid; place-items: center; width: 4.4rem; aspect-ratio: 1; border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent); border-radius: 1.1rem; color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); transform: rotate(5deg); }
+    .diary-heading-mark span { font-size: 2rem; font-weight: 700; line-height: 1; }
+    .diary-heading-mark small { margin-top: 0.15rem; font-size: 0.48rem; letter-spacing: 0.15em; }
+    .diary-calendar { padding: 1.1rem 1.2rem 0.9rem; }
+    .diary-section-topline, .diary-section-title, .diary-calendar-heading, .diary-calendar-note, .diary-section-heading { display: flex; align-items: center; }
+    .diary-section-topline, .diary-section-heading { justify-content: space-between; gap: 1rem; }
+    .diary-section-title { gap: 0.65rem; }
+    .diary-icon { display: grid; place-items: center; width: 2.15rem; aspect-ratio: 1; border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent); border-radius: 0.7rem; color: var(--primary); background: color-mix(in srgb, var(--primary) 9%, transparent); }
+    .diary-icon :global(svg) { width: 1.2rem; height: 1.2rem; }
+    .diary-section-title h2, .diary-section-heading h2 { margin: 0.15rem 0 0; color: var(--deep-text); font-size: 1.06rem; font-weight: 500; letter-spacing: -0.015em; }
+    .diary-total { padding: 0.25rem 0.5rem; border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent); border-radius: 999px; color: var(--primary); font-size: 0.65rem; font-weight: 800; }
+    .diary-calendar-heading { justify-content: space-between; margin: 1rem 0 0.5rem; }
+    .diary-calendar-heading strong { font-size: 0.82rem; font-weight: 500; }
+    .diary-calendar-heading button { display: grid; place-items: center; width: 1.8rem; aspect-ratio: 1; border: 0; border-radius: 50%; color: var(--primary); background: transparent; cursor: pointer; transition: background 160ms ease, transform 160ms ease; }
+    .diary-calendar-heading button:hover { background: color-mix(in srgb, var(--primary) 10%, transparent); transform: translateY(-1px); }
+    .diary-calendar-heading :global(svg) { width: 1rem; height: 1rem; }
+    .diary-weekdays, .diary-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.25rem; text-align: center; }
+    .diary-weekdays { margin-bottom: 0.35rem; color: color-mix(in srgb, var(--deep-text) 48%, transparent); font-size: 0.64rem; font-weight: 400; }
+    .diary-day { display: grid; place-items: center; align-content: center; min-height: 2.7rem; padding: 0.2rem 0.15rem; border: 1px solid transparent; border-radius: 0.55rem; color: color-mix(in srgb, var(--deep-text) 73%, transparent); background: transparent; font-size: 0.72rem; font-weight: 400; text-decoration: none; cursor: default; transition: border-color 160ms ease, background 160ms ease, transform 160ms ease; }
+    .diary-day:hover, .diary-day:focus-visible { border-color: color-mix(in srgb, var(--primary) 28%, transparent); background: color-mix(in srgb, var(--primary) 7%, transparent); transform: translateY(-1px); }
+    .diary-day-empty { pointer-events: none; }
+    .diary-day.has-entry { cursor: pointer; }
+    .diary-day-number { font-size: 0.72rem; line-height: 1.1; }
+    .diary-day-mood { min-height: 1rem; font-size: 0.82rem; line-height: 1.05; }
+    .diary-day.has-entry { color: var(--deep-text); background: color-mix(in srgb, var(--primary) 5%, transparent); }
+    .diary-day.is-today { border-color: var(--primary); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent); }
+    .diary-calendar-note { justify-content: space-between; gap: 0.5rem; margin-top: 0.75rem; padding-top: 0.7rem; border-top: 1px dashed color-mix(in srgb, var(--deep-text) 14%, transparent); color: color-mix(in srgb, var(--deep-text) 50%, transparent); font-size: 0.66rem; }
+    .mood-dot { display: inline-grid; place-items: center; width: 1.1rem; aspect-ratio: 1; margin-right: 0.25rem; border-radius: 50%; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); font-style: normal; }
+    .mood-dot :global(svg) { width: 0.7rem; height: 0.7rem; }
+    .diary-pinned-section { margin-top: 2rem; }
+    .diary-section-heading { padding: 0 0.25rem 0.8rem; border-bottom: 1px dashed color-mix(in srgb, var(--deep-text) 16%, transparent); }
+    .diary-section-heading p { margin: 0; color: color-mix(in srgb, var(--deep-text) 48%, transparent); font-size: 0.72rem; }
+    .diary-pinned-window { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 0.85rem; margin-top: 1.05rem; padding: 0.55rem 0.35rem 0.8rem; }
+    .diary-pinned-card { display: none; min-width: 0; overflow: hidden; border: 1px solid color-mix(in srgb, var(--deep-text) 10%, transparent); border-radius: 0.95rem; background: color-mix(in srgb, var(--card-bg) 62%, transparent); box-shadow: 0 0.65rem 1.6rem color-mix(in srgb, var(--deep-text) 6%, transparent); transition: transform 220ms ease, border-color 220ms ease, box-shadow 220ms ease; }
+    .diary-pinned-card.is-visible { display: block; }
+    .diary-pinned-card:hover { transform: translateY(-0.25rem); border-color: color-mix(in srgb, var(--primary) 30%, transparent); box-shadow: 0 1rem 2rem color-mix(in srgb, var(--deep-text) 11%, transparent); }
+    .diary-pinned-card.is-center { transform: translateY(-0.45rem); }
+    .diary-pinned-card.is-center:hover { transform: translateY(-0.6rem) scale(1.045); z-index: 2; }
+    .diary-cover { display: block; position: relative; height: 14rem; overflow: hidden; border-radius: 0.75rem; background: color-mix(in srgb, var(--primary) 12%, var(--card-bg)); }
+    .diary-cover :global(> div), .diary-cover :global(img) { width: 100%; height: 100%; }
+    .diary-cover :global(img) { object-fit: cover; transition: transform 400ms ease; }
+    .diary-cover:hover :global(img) { transform: scale(1.04); }
+    .diary-cover-overlay { position: absolute; right: 0.75rem; bottom: 0.75rem; display: grid; place-items: center; width: 2.1rem; aspect-ratio: 1; border-radius: 50%; color: white; background: color-mix(in srgb, #1b2528 66%, transparent); opacity: 0; transform: translateY(0.35rem); transition: opacity 180ms ease, transform 180ms ease; }
+    .diary-cover:hover .diary-cover-overlay, .diary-cover:focus-visible .diary-cover-overlay { opacity: 1; transform: translateY(0); }
+    .diary-cover-overlay :global(svg) { width: 1rem; height: 1rem; }
+    .diary-cover-placeholder { display: grid; place-items: center; align-content: center; height: 100%; gap: 0.5rem; color: var(--primary); }
+    .diary-cover-placeholder :global(svg) { width: 3rem; height: 3rem; }
+    .diary-cover-placeholder span { font-size: 2rem; }
+    .diary-card-copy { padding: 0.85rem 0.9rem 1rem; }
+    .diary-card-meta { display: flex; flex-wrap: wrap; gap: 0.3rem 0.6rem; color: color-mix(in srgb, var(--deep-text) 50%, transparent); font-size: 0.65rem; font-weight: 400; line-height: 1.4; }
+    .diary-card-meta span { color: var(--primary); font-weight: 500; }
+    .diary-pinned-card h3 { margin: 0.55rem 0 0.35rem; font-size: 0.98rem; font-weight: 500; letter-spacing: -0.01em; line-height: 1.35; }
+    .diary-pinned-card h3 a { color: var(--deep-text); text-decoration: none; }
+    .diary-pinned-card h3 a:hover { color: var(--primary); }
+    .diary-card-copy p { display: -webkit-box; overflow: hidden; margin: 0; color: color-mix(in srgb, var(--deep-text) 60%, transparent); font-size: 0.72rem; font-weight: 400; line-height: 1.6; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+    .diary-read-link { display: inline-flex; align-items: center; gap: 0.35rem; width: fit-content; margin-top: 0.75rem; color: var(--primary); font-size: 0.68rem; font-weight: 500; text-decoration: none; }
+    .diary-read-link:hover { gap: 0.55rem; }
+    .diary-read-link :global(svg) { width: 0.95rem; height: 0.95rem; }
+    .diary-empty { margin-top: 1rem; padding: 3rem 1rem; border: 1px dashed color-mix(in srgb, var(--deep-text) 18%, transparent); border-radius: 1rem; color: color-mix(in srgb, var(--deep-text) 55%, transparent); text-align: center; }
+    .diary-pinned-controls { display: flex; align-items: center; justify-content: center; gap: 0.55rem; margin-top: 0.1rem; color: color-mix(in srgb, var(--deep-text) 48%, transparent); font-size: 0.68rem; }
+    .diary-pinned-controls button { display: grid; place-items: center; width: 1.8rem; aspect-ratio: 1; border: 1px solid color-mix(in srgb, var(--deep-text) 12%, transparent); border-radius: 50%; color: var(--primary); background: color-mix(in srgb, var(--card-bg) 80%, transparent); cursor: pointer; transition: background 160ms ease, transform 160ms ease; }
+    .diary-pinned-controls button:hover { background: color-mix(in srgb, var(--primary) 10%, transparent); transform: translateY(-1px); }
+    .diary-pinned-controls :global(svg) { width: 0.95rem; height: 0.95rem; }
+    @media (max-width: 680px) {
+        .diary-heading { align-items: flex-start; }
+        .diary-heading-mark { width: 3.6rem; }
+        .diary-calendar { padding: 0.9rem; }
+        .diary-day { min-height: 2.45rem; }
+        .diary-pinned-window { grid-template-columns: 1fr; gap: 0.9rem; padding-inline: 0; }
+        .diary-pinned-card.is-center, .diary-pinned-card.is-center:hover { transform: none; }
+        .diary-cover { height: 12.5rem; }
+    }
+</style>

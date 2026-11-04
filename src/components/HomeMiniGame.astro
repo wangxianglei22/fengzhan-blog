@@ -1,0 +1,283 @@
+---
+import { Icon } from "astro-icon/components";
+---
+
+<home-mini-game class="home-mini-game" data-home-game>
+	<section class="home-game-shell" aria-labelledby="home-game-title">
+		<header class="home-game-heading">
+			<div>
+				<span class="home-game-kicker">QUICK BREAK · 片刻休息</span>
+				<h2 id="home-game-title">今天想玩什么？</h2>
+				<p>翻张卡、选个心情，或者做道轻松的小选择。</p>
+			</div>
+			<span class="home-game-heading-mark" aria-hidden="true"><Icon name="fa6-brands:canadian-maple-leaf" /></span>
+		</header>
+
+		<div class="home-game-tabs" role="tablist" aria-label="互动小游戏">
+			<button type="button" role="tab" id="game-tab-cards" aria-controls="game-panel-cards" aria-selected="true" class="is-active" data-game-tab="cards"><Icon name="material-symbols:collections-bookmark-rounded" />翻卡语录</button>
+			<button type="button" role="tab" id="game-tab-mood" aria-controls="game-panel-mood" aria-selected="false" data-game-tab="mood"><Icon name="material-symbols:sentiment-satisfied-rounded" />心情签</button>
+			<button type="button" role="tab" id="game-tab-choice" aria-controls="game-panel-choice" aria-selected="false" data-game-tab="choice"><Icon name="material-symbols:question-mark-rounded" />二选一</button>
+		</div>
+
+		<div class="home-game-panel" id="game-panel-cards" role="tabpanel" aria-labelledby="game-tab-cards" data-game-panel="cards">
+			<div class="quote-filter-row">
+				<span>语录主题</span>
+				<div class="quote-filter-list" aria-label="选择语录主题">
+					<button type="button" class="quote-filter is-active" aria-pressed="true" data-quote-category="all">全部</button>
+					<button type="button" class="quote-filter" aria-pressed="false" data-quote-category="daily">日常</button>
+					<button type="button" class="quote-filter" aria-pressed="false" data-quote-category="study">学习</button>
+					<button type="button" class="quote-filter" aria-pressed="false" data-quote-category="healing">治愈</button>
+					<button type="button" class="quote-filter" aria-pressed="false" data-quote-category="dream">向前</button>
+				</div>
+				<button class="home-game-shuffle" type="button" data-game-shuffle><Icon name="material-symbols:casino-outline" />摇摇乐</button>
+			</div>
+
+			<div class="home-game-cards" role="list" aria-label="语录卡片">
+				{[
+					{ symbol: "◇", label: "星星卡" },
+					{ symbol: "◆", label: "心情卡" },
+					{ symbol: "☾", label: "月亮卡" },
+				].map((card, index) => (
+					<button class="game-card" type="button" role="listitem" data-game-card aria-pressed="false" aria-label={`翻开${card.label}`}>
+						<span class="game-card-inner">
+							<span class="game-card-face game-card-front"><span class="game-card-spark">{card.symbol}</span><strong>0{index + 1}</strong><small>{card.label} · 点我翻开</small></span>
+							<span class="game-card-face game-card-back"><span class="game-card-back-symbol">{card.symbol}</span><strong data-card-message>等你发现</strong><small data-card-label>今日语录</small></span>
+						</span>
+					</button>
+				))}
+			</div>
+
+			<div class="quote-of-the-moment"><Icon name="material-symbols:format-quote-rounded" /><p data-quote-display aria-live="polite">翻开一张卡片，抽取一句今日语录。</p><button type="button" data-quote-random aria-label="随机换一句语录" title="随机换一句语录"><Icon name="material-symbols:refresh-rounded" /></button></div>
+			<p class="home-game-status" data-game-status aria-live="polite">也可以点“摇摇乐”，让今天的语录自己出现。</p>
+		</div>
+
+		<div class="home-game-panel mood-panel" id="game-panel-mood" role="tabpanel" aria-labelledby="game-tab-mood" data-game-panel="mood" hidden>
+			<div class="interaction-intro"><span class="home-game-kicker">MOOD CHECK</span><h3>现在的心情像什么天气？</h3><p>选一个最接近的状态，收下一句此刻的语录。</p></div>
+			<div class="mood-options" role="group" aria-label="选择此刻的心情">
+				<button type="button" class="mood-option" data-game-mood="sunny" aria-pressed="false"><span>☀️</span><small>晴朗</small></button>
+				<button type="button" class="mood-option" data-game-mood="calm" aria-pressed="false"><span>🌿</span><small>平静</small></button>
+				<button type="button" class="mood-option" data-game-mood="tired" aria-pressed="false"><span>☁️</span><small>有点累</small></button>
+				<button type="button" class="mood-option" data-game-mood="excited" aria-pressed="false"><span>✨</span><small>期待中</small></button>
+				<button type="button" class="mood-option" data-game-mood="blue" aria-pressed="false"><span>🌧️</span><small>小低落</small></button>
+			</div>
+			<div class="mood-result" aria-live="polite"><Icon name="fa6-brands:canadian-maple-leaf" /><p data-mood-message>你的心情值得被认真接住。</p></div>
+		</div>
+
+		<div class="home-game-panel choice-panel" id="game-panel-choice" role="tabpanel" aria-labelledby="game-tab-choice" data-game-panel="choice" hidden>
+			<div class="interaction-intro"><span class="home-game-kicker">THIS OR THAT</span><h3 data-choice-question>今天更想怎样度过？</h3><p>不用想太多，凭第一感觉选一个。</p></div>
+			<div class="choice-options" role="group" aria-label="做出今天的二选一"><button type="button" class="choice-option" data-choice-answer="a"></button><span aria-hidden="true">OR</span><button type="button" class="choice-option" data-choice-answer="b"></button></div>
+			<div class="choice-bottomline"><p data-choice-result aria-live="polite">每个选择，都有属于它的乐趣。</p><button type="button" class="next-question" data-next-question><Icon name="material-symbols:refresh-rounded" />换个问题</button></div>
+		</div>
+	</section>
+</home-mini-game>
+
+<script>
+	import { quoteItems, type QuoteItem, type QuoteCategory } from "../data/quotes";
+
+	const questions = [
+		{ prompt: "今天更想怎样度过？", a: "去户外吹吹风", b: "窝在家里听歌", resultA: "给自己一点新鲜空气，灵感也许就在路上。", resultB: "舒服地待一会儿，也是很棒的安排。" },
+		{ prompt: "此刻更想来点什么？", a: "一份好吃的甜点", b: "一首刚好喜欢的歌", resultA: "好心情值得被认真收藏。", resultB: "让喜欢的旋律陪你走一小段。" },
+		{ prompt: "休息时你会选哪一种？", a: "看一集喜欢的剧", b: "出门散步看晚霞", resultA: "熟悉的故事总能带来一点安心。", resultB: "抬头看看天空，今天也有自己的颜色。" },
+		{ prompt: "今天更想完成哪件小事？", a: "整理好一个角落", b: "学会一个新知识", resultA: "空间清爽一点，心情也会跟着亮起来。", resultB: "新学到的东西，正在悄悄变成你的底气。" },
+	];
+	const moodCategories: Record<string, QuoteCategory> = { sunny: "daily", calm: "healing", tired: "healing", excited: "dream", blue: "healing" };
+
+	class HomeMiniGame extends HTMLElement {
+		activeCategory = "all";
+		lastQuote: QuoteItem | null = null;
+		questionIndex = 0;
+
+		connectedCallback() {
+			if (this.dataset.ready === "true") return;
+			this.dataset.ready = "true";
+			this.addEventListener("click", this.handleClick);
+			this.renderQuestion();
+		}
+
+		handleClick = (event: Event) => {
+			const target = event.target;
+			if (!(target instanceof Element)) return;
+			const tab = target.closest<HTMLElement>("[data-game-tab]");
+			if (tab) return this.activatePanel(tab.dataset.gameTab || "cards");
+			const category = target.closest<HTMLElement>("[data-quote-category]");
+			if (category) return this.activateCategory(category);
+			const card = target.closest<HTMLElement>("[data-game-card]");
+			if (card) return this.toggleCard(card);
+			if (target.closest<HTMLElement>("[data-game-shuffle]")) return this.shuffle();
+			if (target.closest<HTMLElement>("[data-quote-random]")) return this.displayRandomQuote();
+			const mood = target.closest<HTMLElement>("[data-game-mood]");
+			if (mood) return this.chooseMood(mood);
+			const answer = target.closest<HTMLElement>("[data-choice-answer]");
+			if (answer) return this.chooseAnswer(answer);
+			if (target.closest<HTMLElement>("[data-next-question]")) this.nextQuestion();
+		};
+
+		activatePanel(name: string) {
+			this.querySelectorAll<HTMLElement>("[data-game-tab]").forEach((tab) => { const active = tab.dataset.gameTab === name; tab.classList.toggle("is-active", active); tab.setAttribute("aria-selected", String(active)); });
+			this.querySelectorAll<HTMLElement>("[data-game-panel]").forEach((panel) => { panel.hidden = panel.dataset.gamePanel !== name; });
+		}
+
+		activateCategory(selected: HTMLElement) {
+			this.activeCategory = selected.dataset.quoteCategory || "all";
+			this.querySelectorAll<HTMLElement>("[data-quote-category]").forEach((button) => { const active = button === selected; button.classList.toggle("is-active", active); button.setAttribute("aria-pressed", String(active)); });
+			this.setStatus(`已选「${(selected.textContent ?? "").trim()}」语录，翻开卡片抽取一句。`);
+		}
+
+		availableQuotes(category = this.activeCategory) { return category === "all" ? quoteItems : quoteItems.filter((quote) => quote.category === category); }
+
+		randomQuote(category = this.activeCategory) {
+			const available = this.availableQuotes(category);
+			const candidates = available.length > 1 ? available.filter((quote) => quote !== this.lastQuote) : available;
+			const quote = candidates[Math.floor(Math.random() * candidates.length)] || available[0] || quoteItems[0];
+			this.lastQuote = quote;
+			return quote;
+		}
+
+		displayRandomQuote(card?: HTMLElement) {
+			const quote = this.randomQuote();
+			const target = card || this.querySelector<HTMLElement>("[data-game-card]");
+			if (target) this.fillCard(target, quote, true);
+			const output = this.querySelector<HTMLElement>("[data-quote-display]");
+			if (output) output.textContent = `「${quote.text}」`;
+			this.setStatus(`「${quote.label}」语录已抽出，愿它陪你一会儿。`);
+		}
+
+		toggleCard(card: HTMLElement) {
+			if (card.classList.contains("is-flipped")) { card.classList.remove("is-flipped"); card.setAttribute("aria-pressed", "false"); this.setStatus("卡片已经收好，再翻一张看看。"); return; }
+			this.fillCard(card, this.randomQuote(), true);
+		}
+
+		fillCard(card: HTMLElement, quote: QuoteItem, announce: boolean) {
+			card.classList.add("is-flipped"); card.setAttribute("aria-pressed", "true");
+			const message = card.querySelector("[data-card-message]"); const label = card.querySelector("[data-card-label]");
+			if (message) message.textContent = quote.text; if (label) label.textContent = `${quote.label} · 今日语录`;
+			const output = this.querySelector<HTMLElement>("[data-quote-display]"); if (output) output.textContent = `「${quote.text}」`;
+			if (announce) this.setStatus(`抽到了「${quote.label}」语录。`);
+		}
+
+		shuffle() {
+			const cards = [...this.querySelectorAll<HTMLElement>("[data-game-card]")]; const button = this.querySelector<HTMLButtonElement>("[data-game-shuffle]");
+			if (!cards.length || button?.disabled) return; if (button) button.disabled = true;
+			cards.forEach((card) => { card.classList.remove("is-flipped"); card.setAttribute("aria-pressed", "false"); card.classList.add("is-shaking"); });
+			this.setStatus("摇一摇，看看哪张卡会被选中……"); const picked = cards[Math.floor(Math.random() * cards.length)];
+			window.setTimeout(() => { cards.forEach((card) => card.classList.remove("is-shaking")); if (picked) this.fillCard(picked, this.randomQuote(), true); if (button) button.disabled = false; }, 520);
+		}
+
+		chooseMood(selected: HTMLElement) {
+			this.querySelectorAll<HTMLElement>("[data-game-mood]").forEach((button) => { const active = button === selected; button.classList.toggle("is-selected", active); button.setAttribute("aria-pressed", String(active)); });
+			const name = selected.querySelector("small")?.textContent?.trim() || "现在的心情"; const quote = this.randomQuote(moodCategories[selected.dataset.gameMood ?? ""] || "healing"); const output = this.querySelector<HTMLElement>("[data-mood-message]");
+			if (output) output.textContent = `${name}的你，收下一句：「${quote.text}」`;
+		}
+
+		chooseAnswer(selected: HTMLElement) {
+			const question = questions[this.questionIndex]; if (!question) return; const answer = selected.dataset.choiceAnswer;
+			this.querySelectorAll<HTMLButtonElement>("[data-choice-answer]").forEach((button) => { button.disabled = true; button.classList.toggle("is-picked", button === selected); });
+			const result = this.querySelector<HTMLElement>("[data-choice-result]"); if (result) result.textContent = answer === "a" ? question.resultA : question.resultB;
+		}
+
+		nextQuestion() { if (questions.length > 1) { let next = this.questionIndex; while (next === this.questionIndex) next = Math.floor(Math.random() * questions.length); this.questionIndex = next; } this.renderQuestion(); }
+
+		renderQuestion() { const question = questions[this.questionIndex]; if (!question) return; const title = this.querySelector<HTMLElement>("[data-choice-question]"); const a = this.querySelector<HTMLButtonElement>('[data-choice-answer="a"]'); const b = this.querySelector<HTMLButtonElement>('[data-choice-answer="b"]'); const result = this.querySelector<HTMLElement>("[data-choice-result]"); if (title) title.textContent = question.prompt; if (a) { a.textContent = question.a; a.disabled = false; a.classList.remove("is-picked"); } if (b) { b.textContent = question.b; b.disabled = false; b.classList.remove("is-picked"); } if (result) result.textContent = "每个选择，都有属于它的小乐趣。"; }
+
+		setStatus(message: string) { const status = this.querySelector<HTMLElement>("[data-game-status]"); if (status) status.textContent = message; }
+	}
+
+	if (!customElements.get("home-mini-game")) customElements.define("home-mini-game", HomeMiniGame);
+</script>
+
+<style>
+	.home-mini-game { display: block; margin-top: 1.5rem; color: var(--deep-text); }
+	.home-game-shell { position: relative; overflow: hidden; padding: 1.2rem 1.25rem 0.9rem; border: 1px solid color-mix(in srgb, var(--primary) 17%, transparent); border-radius: 1.1rem; background: color-mix(in srgb, var(--card-bg) 70%, transparent); box-shadow: 0 0.8rem 2.2rem color-mix(in srgb, var(--deep-text) 4%, transparent); }
+	.home-game-shell::before { position: absolute; top: -5rem; right: -3rem; width: 12rem; height: 12rem; border-radius: 50%; background: color-mix(in srgb, var(--primary) 11%, transparent); filter: blur(24px); content: ""; pointer-events: none; }
+	.home-game-heading, .home-game-tabs, .quote-filter-row, .quote-filter-list, .quote-of-the-moment, .mood-result, .choice-bottomline { position: relative; z-index: 1; display: flex; align-items: center; }
+	.home-game-heading { justify-content: space-between; gap: 1rem; }
+	.home-game-kicker { color: color-mix(in srgb, var(--primary) 78%, var(--deep-text)); font-size: 0.62rem; font-weight: 800; letter-spacing: 0.09em; }
+	.home-game-heading h2 { margin: 0.25rem 0 0; color: var(--deep-text); font-size: 1.12rem; font-weight: 750; }
+	.home-game-heading p { margin: 0.2rem 0 0; color: color-mix(in srgb, var(--deep-text) 54%, transparent); font-size: 0.72rem; }
+	.home-game-heading-mark { display: grid; flex: 0 0 auto; place-items: center; width: 2.5rem; aspect-ratio: 1; border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent); border-radius: 0.8rem; color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); transform: rotate(5deg); }
+	.home-game-heading-mark :global(svg) { width: 1.2rem; height: 1.2rem; }
+	.home-game-tabs { width: fit-content; gap: 0.3rem; margin-top: 1rem; padding: 0.22rem; border: 1px solid color-mix(in srgb, var(--deep-text) 10%, transparent); border-radius: 0.75rem; background: color-mix(in srgb, var(--deep-text) 3%, transparent); }
+	.home-game-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; min-height: 2rem; padding: 0.38rem 0.68rem; border: 1px solid transparent; border-radius: 0.55rem; color: color-mix(in srgb, var(--deep-text) 57%, transparent); background: transparent; font-size: 0.68rem; font-weight: 700; cursor: pointer; transition: color 160ms ease, border-color 160ms ease, background 160ms ease, transform 160ms ease; }
+	.home-game-tabs button:hover { color: var(--primary); }
+	.home-game-tabs button.is-active { border-color: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary); background: color-mix(in srgb, var(--card-bg) 86%, transparent); box-shadow: 0 0.2rem 0.65rem color-mix(in srgb, var(--deep-text) 5%, transparent); }
+	.home-game-tabs :global(svg) { width: 0.9rem; height: 0.9rem; }
+	.home-game-panel { position: relative; z-index: 1; min-height: 12.5rem; padding-top: 0.85rem; }
+	.home-game-panel[hidden] { display: none; }
+	.quote-filter-row { flex-wrap: wrap; gap: 0.45rem; }
+	.quote-filter-row > span { margin-right: 0.1rem; color: color-mix(in srgb, var(--deep-text) 58%, transparent); font-size: 0.66rem; font-weight: 700; }
+	.quote-filter-list { flex-wrap: wrap; gap: 0.3rem; }
+	.quote-filter { padding: 0.3rem 0.55rem; border: 1px solid color-mix(in srgb, var(--deep-text) 12%, transparent); border-radius: 999px; color: color-mix(in srgb, var(--deep-text) 61%, transparent); background: color-mix(in srgb, var(--card-bg) 58%, transparent); font-size: 0.62rem; cursor: pointer; transition: color 150ms ease, border-color 150ms ease, background 150ms ease; }
+	.quote-filter:hover, .quote-filter.is-active { border-color: color-mix(in srgb, var(--primary) 36%, transparent); color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
+	.home-game-shuffle { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 0.35rem; margin-left: auto; padding: 0.4rem 0.65rem; border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent); border-radius: 999px; color: var(--primary); background: color-mix(in srgb, var(--primary) 7%, transparent); font-size: 0.67rem; font-weight: 750; cursor: pointer; transition: transform 160ms ease, background 160ms ease, opacity 160ms ease; }
+	.home-game-shuffle:hover:not(:disabled) { transform: translateY(-2px) rotate(-2deg); background: color-mix(in srgb, var(--primary) 14%, transparent); }
+	.home-game-shuffle:disabled { opacity: 0.5; cursor: wait; }
+	.home-game-shuffle :global(svg) { width: 0.9rem; height: 0.9rem; }
+	.home-game-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem; margin-top: 0.75rem; perspective: 900px; }
+	.game-card { min-width: 0; height: 8.8rem; padding: 0; border: 0; border-radius: 0.9rem; background: transparent; cursor: pointer; perspective: 900px; }
+	.game-card:nth-child(2) { transform: translateY(-0.25rem); }
+	.game-card:focus-visible, .quote-filter:focus-visible, .home-game-tabs button:focus-visible, .mood-option:focus-visible, .choice-option:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+	.game-card-inner { display: block; position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 650ms cubic-bezier(0.22, 0.8, 0.24, 1); }
+	.game-card.is-flipped .game-card-inner { transform: rotateY(180deg); }
+	.game-card-face { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 0.38rem; overflow: hidden; padding: 0.75rem; border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent); border-radius: 0.9rem; backface-visibility: hidden; box-shadow: 0 0.55rem 1.3rem color-mix(in srgb, var(--deep-text) 7%, transparent); text-align: center; }
+	.game-card-front { color: color-mix(in srgb, var(--deep-text) 68%, transparent); background: linear-gradient(145deg, color-mix(in srgb, var(--primary) 13%, var(--card-bg)), color-mix(in srgb, #a8dff0 9%, var(--card-bg))); }
+	.game-card-front::after { position: absolute; inset: 0.45rem; border: 1px dashed color-mix(in srgb, var(--primary) 28%, transparent); border-radius: 0.65rem; content: ""; pointer-events: none; }
+	.game-card-back { transform: rotateY(180deg); color: var(--deep-text); background: linear-gradient(145deg, color-mix(in srgb, var(--primary) 18%, var(--card-bg)), color-mix(in srgb, #d8b56a 14%, var(--card-bg))); }
+	.game-card-spark, .game-card-back-symbol { position: relative; z-index: 1; color: var(--primary); font-size: 1.7rem; line-height: 1; text-shadow: 0 0 1rem color-mix(in srgb, var(--primary) 35%, transparent); }
+	.game-card-front strong { position: relative; z-index: 1; color: color-mix(in srgb, var(--primary) 72%, var(--deep-text)); font-size: 0.95rem; }
+	.game-card-face small { position: relative; z-index: 1; color: color-mix(in srgb, var(--deep-text) 48%, transparent); font-size: 0.61rem; }
+	.game-card-back strong { position: relative; z-index: 1; max-width: 14rem; color: var(--deep-text); font-size: 0.72rem; font-weight: 700; line-height: 1.5; }
+	.game-card-back-symbol { font-size: 1.3rem; }
+	.game-card:hover .game-card-front { border-color: color-mix(in srgb, var(--primary) 42%, transparent); box-shadow: 0 0.8rem 1.7rem color-mix(in srgb, var(--primary) 13%, transparent); }
+	.game-card.is-shaking { animation: game-card-shake 520ms ease-in-out; }
+	.quote-of-the-moment { gap: 0.55rem; min-height: 2.8rem; margin-top: 0.65rem; padding: 0.42rem 0.65rem; border-top: 1px dashed color-mix(in srgb, var(--deep-text) 13%, transparent); border-bottom: 1px dashed color-mix(in srgb, var(--deep-text) 13%, transparent); color: var(--primary); }
+	.quote-of-the-moment > :global(svg) { flex: 0 0 auto; width: 1rem; height: 1rem; }
+	.quote-of-the-moment p { flex: 1; margin: 0; color: color-mix(in srgb, var(--deep-text) 73%, transparent); font-size: 0.7rem; line-height: 1.5; }
+	.quote-of-the-moment button { display: grid; flex: 0 0 auto; place-items: center; width: 1.7rem; aspect-ratio: 1; border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent); border-radius: 50%; color: var(--primary); background: color-mix(in srgb, var(--primary) 6%, transparent); cursor: pointer; transition: transform 160ms ease, background 160ms ease; }
+	.quote-of-the-moment button:hover { transform: rotate(25deg); background: color-mix(in srgb, var(--primary) 13%, transparent); }
+	.quote-of-the-moment button :global(svg) { width: 0.85rem; height: 0.85rem; }
+	.home-game-status { min-height: 1rem; margin: 0.55rem 0 0; color: color-mix(in srgb, var(--deep-text) 50%, transparent); font-size: 0.64rem; text-align: center; }
+	.interaction-intro { padding: 0.3rem 0.2rem 0; }
+	.interaction-intro h3 { margin: 0.3rem 0 0; color: var(--deep-text); font-size: 1rem; font-weight: 750; }
+	.interaction-intro p { margin: 0.25rem 0 0; color: color-mix(in srgb, var(--deep-text) 52%, transparent); font-size: 0.7rem; }
+	.mood-options { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.5rem; margin-top: 0.9rem; }
+	.mood-option { display: grid; justify-items: center; gap: 0.22rem; min-height: 4.25rem; padding: 0.45rem 0.3rem; border: 1px solid color-mix(in srgb, var(--deep-text) 10%, transparent); border-radius: 0.75rem; color: color-mix(in srgb, var(--deep-text) 62%, transparent); background: color-mix(in srgb, var(--card-bg) 54%, transparent); cursor: pointer; transition: transform 170ms ease, border-color 170ms ease, background 170ms ease; }
+	.mood-option:hover, .mood-option.is-selected { transform: translateY(-2px); border-color: color-mix(in srgb, var(--primary) 36%, transparent); background: color-mix(in srgb, var(--primary) 8%, var(--card-bg)); }
+	.mood-option span { font-size: 1.35rem; line-height: 1.2; }
+	.mood-option small { font-size: 0.62rem; }
+	.mood-result { gap: 0.55rem; min-height: 2.8rem; margin-top: 0.8rem; padding: 0.4rem 0.6rem; border-top: 1px dashed color-mix(in srgb, var(--deep-text) 13%, transparent); color: var(--primary); }
+	.mood-result :global(svg) { flex: 0 0 auto; width: 0.95rem; height: 0.95rem; }
+	.mood-result p { margin: 0; color: color-mix(in srgb, var(--deep-text) 73%, transparent); font-size: 0.7rem; line-height: 1.55; }
+	.choice-options { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 0.8rem; margin-top: 1.4rem; }
+	.choice-options > span { color: color-mix(in srgb, var(--primary) 75%, var(--deep-text)); font-size: 0.62rem; font-weight: 800; }
+	.choice-option { min-height: 3.4rem; padding: 0.65rem 0.8rem; border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent); border-radius: 0.8rem; color: var(--deep-text); background: color-mix(in srgb, var(--primary) 6%, var(--card-bg)); font-size: 0.77rem; font-weight: 700; cursor: pointer; transition: transform 170ms ease, border-color 170ms ease, background 170ms ease; }
+	.choice-option:hover:not(:disabled), .choice-option.is-picked { transform: translateY(-2px); border-color: color-mix(in srgb, var(--primary) 42%, transparent); background: color-mix(in srgb, var(--primary) 14%, var(--card-bg)); }
+	.choice-option:disabled:not(.is-picked) { opacity: 0.55; }
+	.choice-bottomline { justify-content: space-between; gap: 0.8rem; min-height: 2.8rem; margin-top: 0.75rem; padding-top: 0.55rem; border-top: 1px dashed color-mix(in srgb, var(--deep-text) 13%, transparent); }
+	.choice-bottomline p { margin: 0; color: color-mix(in srgb, var(--deep-text) 66%, transparent); font-size: 0.68rem; line-height: 1.5; }
+	.next-question { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 0.3rem; padding: 0.36rem 0.55rem; border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent); border-radius: 0.6rem; color: var(--primary); background: color-mix(in srgb, var(--primary) 5%, transparent); font-size: 0.64rem; cursor: pointer; }
+	.next-question :global(svg) { width: 0.8rem; height: 0.8rem; }
+	@keyframes game-card-shake { 0%, 100% { transform: translateX(0) rotate(0); } 20% { transform: translateX(-5px) rotate(-2deg); } 40% { transform: translateX(5px) rotate(2deg); } 60% { transform: translateX(-4px) rotate(-1.5deg); } 80% { transform: translateX(3px) rotate(1deg); } }
+	@media (max-width: 767px) {
+		.home-game-shell { padding: 1rem 0.8rem 0.8rem; }
+		.home-game-tabs { width: 100%; }
+		.home-game-tabs button { flex: 1; padding-inline: 0.35rem; font-size: 0.63rem; }
+		.home-game-panel { min-height: 13rem; }
+		.quote-filter-row > span { display: none; }
+		.quote-filter-row { gap: 0.25rem; }
+		.quote-filter-list { gap: 0.2rem; }
+		.quote-filter { padding-inline: 0.42rem; font-size: 0.59rem; }
+		.home-game-shuffle { gap: 0.2rem; padding-inline: 0.5rem; font-size: 0.62rem; }
+		.home-game-cards { gap: 0.42rem; }
+		.game-card { height: 8rem; }
+		.game-card-face { padding: 0.45rem; }
+		.game-card-back strong { font-size: 0.65rem; }
+		.mood-options { gap: 0.3rem; }
+		.mood-option { min-height: 4rem; padding-inline: 0.15rem; }
+		.choice-options { gap: 0.45rem; }
+		.choice-option { min-height: 3.2rem; padding-inline: 0.5rem; font-size: 0.7rem; }
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.game-card-inner, .home-game-tabs button, .mood-option, .choice-option, .home-game-shuffle, .quote-of-the-moment button { transition: none; }
+		.game-card.is-shaking { animation: none; }
+	}
+</style>

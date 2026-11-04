@@ -1,0 +1,188 @@
+<div class="ambient-background" aria-hidden="true">
+	<div class="ambient-glow ambient-glow-one"></div>
+	<div class="ambient-glow ambient-glow-two"></div>
+	<canvas data-ambient-canvas></canvas>
+</div>
+
+<script>
+	type ParticleKind = "sparkle" | "flake";
+	type Particle = {
+		kind: ParticleKind;
+		x: number;
+		y: number;
+		size: number;
+		speed: number;
+		drift: number;
+		phase: number;
+		rotation: number;
+		rotationSpeed: number;
+		alpha: number;
+	};
+
+	const canvas = document.querySelector<HTMLCanvasElement>("[data-ambient-canvas]");
+	const ambientWindow = window as Window & { __blogAmbientEffects?: boolean };
+
+	if (canvas && !ambientWindow.__blogAmbientEffects) {
+		ambientWindow.__blogAmbientEffects = true;
+		const context = canvas.getContext("2d");
+		if (context) {
+			let width = 0;
+			let height = 0;
+			let devicePixelRatio = 1;
+			let particles: Particle[] = [];
+			let animationFrame = 0;
+			let lastTime = performance.now();
+			let lastDrawTime = 0;
+			let prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+			let isHidden = document.visibilityState === "hidden";
+
+			const random = (min: number, max: number) => min + Math.random() * (max - min);
+			const isDark = () => document.documentElement.classList.contains("dark");
+
+			const makeParticle = (initial = false): Particle => ({
+				kind: Math.random() > 0.42 ? "sparkle" : "flake",
+				x: random(0, width),
+				y: initial ? random(0, height) : random(-height * 0.18, -8),
+				size: random(1.4, 4.2),
+				speed: random(5, 16),
+				drift: random(7, 22),
+				phase: random(0, Math.PI * 2),
+				rotation: random(0, Math.PI * 2),
+				rotationSpeed: random(-0.3, 0.3),
+				alpha: random(0.25, 0.75),
+			});
+
+			const resize = () => {
+				devicePixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+				width = window.innerWidth;
+				height = window.innerHeight;
+				canvas.width = Math.floor(width * devicePixelRatio);
+				canvas.height = Math.floor(height * devicePixelRatio);
+				canvas.style.width = `${width}px`;
+				canvas.style.height = `${height}px`;
+				context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+				const count = Math.min(72, Math.max(24, Math.floor((width * height) / 28000)));
+				particles = Array.from({ length: count }, () => makeParticle(true));
+				draw();
+			};
+
+			const drawSparkle = (particle: Particle) => {
+				context.save();
+				context.translate(particle.x, particle.y);
+				context.rotate(particle.rotation);
+				context.beginPath();
+				context.moveTo(0, -particle.size * 1.8);
+				context.quadraticCurveTo(particle.size * 0.35, -particle.size * 0.35, particle.size * 1.55, 0);
+				context.quadraticCurveTo(particle.size * 0.35, particle.size * 0.35, 0, particle.size * 1.8);
+				context.quadraticCurveTo(-particle.size * 0.35, particle.size * 0.35, -particle.size * 1.55, 0);
+				context.quadraticCurveTo(-particle.size * 0.35, -particle.size * 0.35, 0, -particle.size * 1.8);
+				context.fill();
+				context.restore();
+			};
+
+			const drawFlake = (particle: Particle) => {
+				context.save();
+				context.translate(particle.x, particle.y);
+				context.rotate(particle.rotation);
+				context.lineWidth = Math.max(0.55, particle.size * 0.22);
+				context.lineCap = "round";
+				for (let arm = 0; arm < 3; arm += 1) {
+					context.rotate(Math.PI / 3);
+					context.beginPath();
+					context.moveTo(-particle.size, 0);
+					context.lineTo(particle.size, 0);
+					context.stroke();
+				}
+				context.restore();
+			};
+
+			const draw = () => {
+				context.clearRect(0, 0, width, height);
+				const colors = isDark()
+					? { sparkle: "#e8c98a", flake: "#b9cfe6" }
+					: { sparkle: "#c9a25c", flake: "#8fa8c4" };
+				const now = performance.now();
+				const elapsed = Math.min((now - lastTime) / 1000, 0.05);
+				lastTime = now;
+
+				for (const particle of particles) {
+					if (!prefersReducedMotion) {
+						particle.y += particle.speed * elapsed;
+						particle.x += Math.sin(now * 0.00045 + particle.phase) * particle.drift * elapsed;
+						particle.rotation += particle.rotationSpeed * elapsed;
+						if (particle.y > height + 12) Object.assign(particle, makeParticle(false), { x: random(0, width) });
+						if (particle.x < -20) particle.x = width + 10;
+						if (particle.x > width + 20) particle.x = -10;
+					}
+
+					const twinkle = particle.kind === "sparkle" ? 0.72 + Math.sin(now * 0.002 + particle.phase) * 0.28 : 0.9;
+					context.globalAlpha = particle.alpha * twinkle;
+					context.fillStyle = colors.sparkle;
+					context.strokeStyle = colors.flake;
+					if (particle.kind === "sparkle") drawSparkle(particle);
+					else drawFlake(particle);
+				}
+				context.globalAlpha = 1;
+			};
+
+			const animate = (time: number) => {
+				if (isHidden) return;
+				if (!prefersReducedMotion) {
+					if (time - lastDrawTime >= 33) {
+						lastDrawTime = time;
+						draw();
+					}
+					animationFrame = requestAnimationFrame(animate);
+				}
+			};
+
+			const startAnimation = () => {
+				cancelAnimationFrame(animationFrame);
+				lastTime = performance.now();
+				lastDrawTime = 0;
+				if (!prefersReducedMotion && !isHidden) animationFrame = requestAnimationFrame(animate);
+			};
+
+			window.addEventListener("resize", resize, { passive: true });
+			document.addEventListener("visibilitychange", () => {
+				isHidden = document.visibilityState === "hidden";
+				if (isHidden) cancelAnimationFrame(animationFrame);
+				else startAnimation();
+			});
+			const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+			motionQuery.addEventListener?.("change", (event) => {
+				prefersReducedMotion = event.matches;
+				startAnimation();
+			});
+
+			resize();
+			startAnimation();
+		}
+	}
+</script>
+
+<style is:global>
+	body { isolation: isolate; }
+	.ambient-background {
+		position: fixed;
+		z-index: 0;
+		inset: 0;
+		overflow: hidden;
+		pointer-events: none;
+		background:
+			radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--primary) 9%, transparent), transparent 31%),
+			radial-gradient(circle at 88% 78%, color-mix(in srgb, #8ac8e8 8%, transparent), transparent 28%);
+		opacity: 0.92;
+	}
+	.ambient-background canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; opacity: 0.78; }
+	.ambient-glow { position: absolute; width: 18rem; aspect-ratio: 1; border-radius: 50%; filter: blur(30px); opacity: 0.2; background: var(--primary); animation: ambient-drift 18s ease-in-out infinite alternate; }
+	.ambient-glow-one { top: 7%; left: -7rem; }
+	.ambient-glow-two { right: -8rem; bottom: 16%; background: #8ac8e8; animation-delay: -8s; }
+	@keyframes ambient-drift {
+		from { transform: translate3d(0, 0, 0) scale(0.92); }
+		to { transform: translate3d(2.5rem, 1.5rem, 0) scale(1.08); }
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.ambient-glow { animation: none; }
+	}
+</style>

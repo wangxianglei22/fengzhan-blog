@@ -1,0 +1,156 @@
+---
+import { getCategoryUrl, getPostUrlBySlug, url } from "../utils/url-utils";
+import type { PostForList } from "../utils/content-utils";
+
+interface Props {
+	posts: PostForList[];
+	tags: string[];
+	categories: string[];
+	uncategorized: boolean;
+}
+
+const { posts, tags, categories, uncategorized } = Astro.props;
+const categoryCounts = new Map<string, number>();
+for (const post of posts) {
+	const category = post.data.category?.trim() || "未分类";
+	categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1);
+}
+const categoryOptions = [...categoryCounts.entries()].sort(([a], [b]) => a.localeCompare(b, "zh-CN"));
+
+const filteredPosts = posts.filter((post) => {
+	const category = post.data.category?.trim() || "未分类";
+	const matchesTags = tags.length === 0 || (post.data.tags ?? []).some((tag) => tags.includes(tag));
+	const matchesCategories = categories.length === 0 || categories.includes(category);
+	const matchesUncategorized = !uncategorized || category === "未分类";
+	return matchesTags && matchesCategories && matchesUncategorized;
+});
+
+const postsByYear = new Map<number, PostForList[]>();
+for (const post of filteredPosts) {
+	const year = new Date(post.data.published).getFullYear();
+	if (!Number.isNaN(year)) postsByYear.set(year, [...(postsByYear.get(year) ?? []), post]);
+}
+const groups = [...postsByYear.entries()].sort(([a], [b]) => b - a);
+const formatDate = (date: Date) => `${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+---
+
+<div class="card-base archive-panel px-5 py-5 sm:px-8 sm:py-6">
+	<section class="archive-categories" aria-labelledby="archive-categories-title">
+		<div class="archive-heading-row">
+			<div>
+				<p class="archive-eyebrow">文章分类</p>
+				<h2 id="archive-categories-title">按主题浏览</h2>
+			</div>
+			<span class="archive-summary">{posts.length} 篇文章</span>
+		</div>
+		<nav class="archive-category-list" aria-label="按文章分类筛选">
+			<a href={url("/archive/")} class:list={[(categories.length === 0 && !uncategorized) && "active", "archive-category"]}>
+				全部 <span>{posts.length}</span>
+			</a>
+			{categoryOptions.map(([name, count]) => (
+				<a href={getCategoryUrl(name === "未分类" ? null : name)} data-archive-filter={name === "未分类" ? "__uncategorized__" : name} class:list={[(categories.includes(name) || (name === "未分类" && uncategorized)) && "active", "archive-category"]}>
+					{name} <span>{count}</span>
+				</a>
+			))}
+		</nav>
+	</section>
+
+	<div class="archive-heading-row timeline-heading">
+		<div>
+			<p class="archive-eyebrow">TIMELINE</p>
+			<h2>文章时间线</h2>
+		</div>
+		<span class="archive-summary">按发布时间排列</span>
+	</div>
+
+	{groups.map(([year, yearPosts], index) => (
+		<details class="timeline-year" aria-label={`${year} 年文章`} open={index === 0}>
+			<summary class="timeline-year-heading">
+				<strong>{year}</strong>
+				<span>{yearPosts.length} 篇文章</span>
+				<span class="year-chevron" aria-hidden="true"></span>
+			</summary>
+			<div class="timeline-list">
+				{yearPosts.map((post) => (
+					<a href={getPostUrlBySlug(post.slug)} data-archive-post data-category={post.data.category?.trim() || "未分类"} data-tags={JSON.stringify(post.data.tags ?? [])} class="timeline-post">
+						<time datetime={post.data.published.toISOString()}>{formatDate(post.data.published)}</time>
+						<span class="timeline-dot" aria-hidden="true"></span>
+						<strong>{post.data.title}</strong>
+						<span class="timeline-meta">{post.data.category || "未分类"}{post.data.tags.length ? ` · ${post.data.tags.map((tag) => `#${tag}`).join(" ")}` : ""}</span>
+					</a>
+				))}
+			</div>
+		</details>
+	))}
+
+	{groups.length === 0 && <p class="archive-empty">{posts.length === 0 ? "还没有文章" : "没有符合条件的文章"}</p>}
+</div>
+
+<script>
+	const archiveRoot = document.querySelector<HTMLElement>(".archive-panel");
+	if (archiveRoot) {
+		const filterLinks = archiveRoot.querySelectorAll<HTMLAnchorElement>("[data-archive-filter]");
+		const allLink = archiveRoot.querySelector<HTMLAnchorElement>(".archive-category:first-child");
+		const posts = [...archiveRoot.querySelectorAll<HTMLElement>("[data-archive-post]")];
+		const years = [...archiveRoot.querySelectorAll<HTMLElement>(".timeline-year")];
+
+		const applyFilters = (params: URLSearchParams) => {
+			const categories = params.getAll("category");
+			const tags = params.getAll("tag");
+			const uncategorized = params.get("uncategorized") === "true";
+			let visibleCount = 0;
+			posts.forEach((post) => {
+				const postTags = JSON.parse(post.dataset.tags || "[]") as string[];
+				const matchesCategory = categories.length === 0 || categories.includes(post.dataset.category || "");
+				const matchesTags = tags.length === 0 || tags.some((tag) => postTags.includes(tag));
+				const matchesUncategorized = !uncategorized || post.dataset.category === "未分类";
+				const visible = matchesCategory && matchesTags && matchesUncategorized;
+				post.hidden = !visible;
+				if (visible) visibleCount++;
+			});
+			years.forEach((year) => {
+				year.hidden = !year.querySelector("[data-archive-post]:not([hidden])");
+			});
+			filterLinks.forEach((link) => link.classList.toggle("active", link.dataset.archiveFilter === (uncategorized ? "__uncategorized__" : categories[0])));
+			allLink?.classList.toggle("active", categories.length === 0 && tags.length === 0 && !uncategorized);
+			const summary = archiveRoot.querySelector<HTMLElement>(".archive-summary");
+			if (summary) summary.textContent = `${visibleCount} 篇文章`;
+		};
+
+		applyFilters(new URLSearchParams(window.location.search));
+	}
+</script>
+
+<style>
+	.archive-panel { color: var(--deep-text); }
+	.archive-categories { padding-bottom: 1.25rem; border-bottom: 1px dashed color-mix(in srgb, var(--deep-text) 14%, transparent); }
+	.archive-heading-row { display: flex; align-items: end; justify-content: space-between; gap: 1rem; }
+	.archive-heading-row h2 { display: flex; align-items: center; gap: 0.4rem; margin: 0.2rem 0 0; color: var(--deep-text); font-size: 1.25rem; font-weight: 800; }
+	.archive-eyebrow { margin: 0; color: var(--primary); font-size: 0.68rem; font-weight: 800; }
+	.archive-summary { color: color-mix(in srgb, var(--deep-text) 50%, transparent); font-size: 0.76rem; white-space: nowrap; }
+	.archive-category-list { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.85rem; }
+	.archive-category { display: inline-flex; align-items: center; gap: 0.45rem; min-height: 2.15rem; padding: 0.25rem 0.7rem; border: 1px solid color-mix(in srgb, var(--deep-text) 11%, transparent); border-radius: 999px; color: color-mix(in srgb, var(--deep-text) 76%, transparent); font-size: 0.78rem; font-weight: 700; text-decoration: none; transition: color 150ms ease, border-color 150ms ease, background 150ms ease; }
+	.archive-category span { color: color-mix(in srgb, var(--deep-text) 48%, transparent); font-size: 0.68rem; font-weight: 600; }
+	.archive-category:hover, .archive-category.active { border-color: color-mix(in srgb, var(--primary) 38%, transparent); color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
+	.timeline-heading { margin: 1.35rem 0 0.5rem; }
+	.timeline-year-heading { display: flex; align-items: baseline; gap: 1rem; padding: 0.75rem 0 0.35rem; cursor: pointer; list-style: none; }
+	.timeline-year-heading::-webkit-details-marker { display: none; }
+	.timeline-year-heading strong { width: 4.5rem; color: color-mix(in srgb, var(--deep-text) 78%, transparent); font-size: 1.4rem; }
+	.timeline-year-heading span { color: color-mix(in srgb, var(--deep-text) 48%, transparent); font-size: 0.75rem; }
+	.timeline-year-heading .year-chevron { width: 0.5rem; height: 0.5rem; margin: 0 0 0 auto; border-right: 1.5px solid color-mix(in srgb, var(--deep-text) 48%, transparent); border-bottom: 1.5px solid color-mix(in srgb, var(--deep-text) 48%, transparent); transform: rotate(45deg) translateY(-0.15rem); transition: transform 160ms ease; }
+	.timeline-year[open] > .timeline-year-heading .year-chevron { transform: rotate(225deg) translate(-0.1rem, -0.05rem); }
+	.timeline-list { margin-left: 2.1rem; border-left: 1px dashed color-mix(in srgb, var(--deep-text) 18%, transparent); }
+	.timeline-post { display: grid; grid-template-columns: 3.5rem 0.8rem minmax(0, 1fr) minmax(8rem, 32%); align-items: center; gap: 0.7rem; min-height: 2.7rem; padding: 0.25rem 0.5rem; border-radius: 0.45rem; color: color-mix(in srgb, var(--deep-text) 68%, transparent); text-decoration: none; }
+	.timeline-post[hidden], .timeline-year[hidden] { display: none !important; }
+	.timeline-post:hover { color: var(--primary); background: color-mix(in srgb, var(--primary) 6%, transparent); }
+	.timeline-post time { font-size: 0.72rem; text-align: right; }
+	.timeline-dot { width: 0.42rem; aspect-ratio: 1; border-radius: 50%; background: color-mix(in srgb, var(--deep-text) 35%, transparent); outline: 3px solid var(--card-bg); }
+	.timeline-post:hover .timeline-dot { background: var(--primary); transform: scale(1.15); }
+	.timeline-post strong { overflow: hidden; color: var(--deep-text); font-size: 0.88rem; text-overflow: ellipsis; white-space: nowrap; }
+	.timeline-meta { overflow: hidden; color: color-mix(in srgb, var(--deep-text) 42%, transparent); font-size: 0.68rem; text-overflow: ellipsis; white-space: nowrap; }
+	.archive-empty { margin: 0; padding: 2rem 0; color: color-mix(in srgb, var(--deep-text) 55%, transparent); text-align: center; }
+	@media (max-width: 767px) {
+		.timeline-post { grid-template-columns: 2.8rem 0.6rem minmax(0, 1fr); gap: 0.55rem; }
+		.timeline-meta { display: none; }
+	}
+</style>

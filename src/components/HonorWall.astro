@@ -1,0 +1,122 @@
+---
+import { Icon } from "astro-icon/components";
+import type { Honor } from "../utils/honors";
+import { formatHonorDate } from "../utils/honors";
+
+type Props = {
+	honors: Honor[];
+};
+
+const { honors } = Astro.props;
+---
+
+<section class="honor-wall" aria-labelledby="honor-wall-title">
+	<div class="about-section-heading">
+		<div>
+			<span>HONOR WALL</span>
+			<h2 id="honor-wall-title"><Icon name="fa6-brands:canadian-maple-leaf" /> 我的荣誉墙</h2>
+		</div>
+		<p>{honors.length ? `已收录 ${honors.length} 项荣誉` : "把值得记住的时刻挂在这里"}</p>
+	</div>
+
+	{honors.length ? (
+		<>
+			<div class="honor-list" role="list">
+				{honors.map((honor, index) => (
+					<article class="honor-row" role="listitem" data-honor-row data-honor-index={index} hidden={index >= 5}>
+						<span class="honor-index">{String(index + 1).padStart(2, "0")}</span>
+						<time datetime={honor.date} class="honor-date">{formatHonorDate(honor.date)}</time>
+						<div class="honor-main">
+							<h3>{honor.name}</h3>
+							{honor.issuer && <span class="honor-issuer">{honor.issuer}</span>}
+						</div>
+						<span class="honor-award">{honor.award || honor.category}</span>
+					</article>
+				))}
+			</div>
+			{honors.length > 5 && (
+				<nav class="honor-pagination" data-honor-pagination aria-label="荣誉墙分页">
+					<button type="button" data-honor-prev disabled aria-label="上一页">上一页</button>
+					<span data-honor-page aria-live="polite">1 / {Math.ceil(honors.length / 5)}</span>
+					<button type="button" data-honor-next aria-label="下一页">下一页</button>
+				</nav>
+			)}
+		</>
+	) : (
+		<div class="honor-empty">
+			<div class="honor-empty-icon"><Icon name="fa6-brands:canadian-maple-leaf" /></div>
+			<div>
+				<strong>荣誉墙正在等待第一枚勋章</strong>
+				<p>在 <code>src/data/honors.md</code> 中按模板添加奖项，这里会自动生成列表。</p>
+			</div>
+		</div>
+	)}
+</section>
+
+<style>
+	.honor-wall { margin-top: 2.8rem; }
+	.about-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; padding: 0 0.25rem 0.85rem; border-bottom: 1px dashed color-mix(in srgb, var(--deep-text) 16%, transparent); }
+	.about-section-heading span { color: color-mix(in srgb, var(--primary) 70%, var(--deep-text)); font-size: 0.68rem; font-weight: 800; letter-spacing: 0.12em; }
+	.about-section-heading h2 { display: flex; align-items: center; gap: 0.45rem; margin: 0.3rem 0 0; color: var(--deep-text); font-size: 1.45rem; }
+	.about-section-heading h2 :global(svg) { width: 1.15rem; height: 1.15rem; color: var(--primary); }
+	.about-section-heading p { margin: 0; color: color-mix(in srgb, var(--deep-text) 48%, transparent); font-size: 0.72rem; }
+	.honor-list { padding-top: 0.35rem; }
+	.honor-row { display: grid; grid-template-columns: 2rem 8.5rem minmax(0, 1fr) minmax(8rem, auto); align-items: center; gap: 0.8rem; min-height: 3.8rem; padding: 0.6rem 0.35rem; border-bottom: 1px solid color-mix(in srgb, var(--deep-text) 10%, transparent); transition: background 160ms ease, padding 160ms ease; }
+	.honor-row[hidden] { display: none; }
+	.honor-row:first-child { border-top: 1px solid color-mix(in srgb, var(--deep-text) 10%, transparent); }
+	.honor-row:hover { padding-right: 0.7rem; padding-left: 0.7rem; border-color: color-mix(in srgb, var(--primary) 25%, transparent); border-radius: 0.55rem; background: color-mix(in srgb, var(--primary) 5%, transparent); }
+	.honor-index { color: color-mix(in srgb, var(--primary) 72%, var(--deep-text)); font-size: 0.62rem; font-weight: 850; letter-spacing: 0.08em; }
+	.honor-date { color: color-mix(in srgb, var(--deep-text) 54%, transparent); font-size: 0.72rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+	.honor-main { min-width: 0; }
+	.honor-main h3 { margin: 0; overflow: hidden; color: var(--deep-text); font-size: 0.86rem; font-weight: 750; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
+	.honor-issuer { display: block; margin-top: 0.12rem; overflow: hidden; color: color-mix(in srgb, var(--deep-text) 43%, transparent); font-size: 0.64rem; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+	.honor-award { justify-self: end; padding: 0.2rem 0.5rem; border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent); border-radius: 999px; color: color-mix(in srgb, var(--primary) 74%, var(--deep-text)); background: color-mix(in srgb, var(--primary) 6%, transparent); font-size: 0.62rem; white-space: nowrap; }
+	.honor-pagination { display: flex; align-items: center; justify-content: center; gap: 0.7rem; padding-top: 0.9rem; color: color-mix(in srgb, var(--deep-text) 50%, transparent); font-size: 0.68rem; }
+	.honor-pagination button { padding: 0.28rem 0.65rem; border: 1px solid color-mix(in srgb, var(--deep-text) 13%, transparent); border-radius: 999px; color: color-mix(in srgb, var(--deep-text) 68%, transparent); background: color-mix(in srgb, var(--card-bg) 45%, transparent); cursor: pointer; transition: color 160ms ease, border-color 160ms ease, background 160ms ease; }
+	.honor-pagination button:hover:not(:disabled) { border-color: color-mix(in srgb, var(--primary) 35%, transparent); color: var(--primary); background: color-mix(in srgb, var(--primary) 6%, transparent); }
+	.honor-pagination button:disabled { cursor: default; opacity: 0.38; }
+	.honor-empty { display: flex; align-items: center; gap: 0.8rem; margin-top: 1rem; padding: 1rem; border: 1px dashed color-mix(in srgb, var(--primary) 28%, transparent); border-radius: 1rem; color: color-mix(in srgb, var(--deep-text) 68%, transparent); background: color-mix(in srgb, var(--primary) 5%, transparent); }
+	.honor-empty-icon { display: grid; flex: 0 0 auto; place-items: center; width: 2.4rem; aspect-ratio: 1; border-radius: 0.75rem; color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
+	.honor-empty-icon :global(svg) { width: 1.3rem; height: 1.3rem; }
+	.honor-empty strong { color: var(--deep-text); font-size: 0.85rem; }
+	.honor-empty p { margin: 0.25rem 0 0; font-size: 0.72rem; line-height: 1.6; }
+	.honor-empty code { color: var(--primary); font-size: 0.68rem; }
+	@media (max-width: 767px) {
+		.about-section-heading { align-items: flex-start; flex-direction: column; gap: 0.4rem; }
+		.honor-row { grid-template-columns: 1.6rem 5.4rem minmax(0, 1fr); gap: 0.45rem; min-height: 3.5rem; }
+		.honor-award { grid-column: 3; justify-self: start; margin-top: -0.2rem; }
+	}
+</style>
+
+<script is:inline>
+	const setupHonorPagination = () => {
+		document.querySelectorAll("[data-honor-pagination]").forEach((pagination) => {
+			if (pagination.dataset.initialized === "true") return;
+			const wall = pagination.closest(".honor-wall");
+			const rows = Array.from(wall?.querySelectorAll("[data-honor-row]") ?? []);
+			const previous = pagination.querySelector("[data-honor-prev]");
+			const next = pagination.querySelector("[data-honor-next]");
+			const pageLabel = pagination.querySelector("[data-honor-page]");
+			const pageSize = 5;
+			const pageCount = Math.ceil(rows.length / pageSize);
+			let page = 0;
+
+			const render = () => {
+				rows.forEach((row, index) => {
+					row.hidden = index < page * pageSize || index >= (page + 1) * pageSize;
+				});
+				if (previous) previous.disabled = page === 0;
+				if (next) next.disabled = page === pageCount - 1;
+				if (pageLabel) pageLabel.textContent = `${page + 1} / ${pageCount}`;
+			};
+
+			previous?.addEventListener("click", () => { page = Math.max(0, page - 1); render(); });
+			next?.addEventListener("click", () => { page = Math.min(pageCount - 1, page + 1); render(); });
+			pagination.dataset.initialized = "true";
+			render();
+		});
+	};
+
+	setupHonorPagination();
+	document.addEventListener("astro:page-load", setupHonorPagination);
+</script>
