@@ -30,7 +30,9 @@ function resolveLocalAudioUrl(rawUrl: string): string {
 	if (!existsSync(filePath) || !statSync(filePath).isFile()) {
 		throw new Error(`找不到歌单中的音频文件：${filePath}`);
 	}
-	return `/audio/${parts.map(encodeURIComponent).join("/")}`;
+	// 走 /api/audio/ 代理：Cloudflare Pages 的静态资源不响应 Range 请求，
+	// 浏览器会把音频视为不可 seek，进度条拖动会跳回起点。代理层补上 206 支持。
+	return `/api/audio/${parts.map(encodeURIComponent).join("/")}`;
 }
 
 export function parseMusic(source: string): MusicTrack[] {
