@@ -196,8 +196,9 @@ let links: NavBarLink[] = navBarConfig.links.map(
 // 点一次「外观设置」被 toggle 两次（打开又关上），看起来就是按钮失灵。
 // 用 window 上的标记保证全局只绑定一次。
 const navbarBoundKey = "__fengzhanNavbarBound";
-if (!(window[navbarBoundKey])) {
-	window[navbarBoundKey] = true;
+const globalScope = window as typeof window & { __fengzhanNavbarBound?: boolean };
+if (!globalScope[navbarBoundKey]) {
+	globalScope[navbarBoundKey] = true;
 
 	document.addEventListener("click", (event) => {
 		if (!(event.target instanceof Element)) return;
