@@ -642,6 +642,14 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 				this.renderModuleEditor();
 				return;
 			}
+			// Cloudflare Pages 单文件上限 25 MiB，超出会在构建阶段被拒绝部署。
+			const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+			if (file.size > MAX_AUDIO_BYTES) {
+				if (status) {
+					status.textContent = `文件 ${(file.size / 1024 / 1024).toFixed(1)} MiB，超过 Cloudflare Pages 的 25 MiB 上限。请先转成 MP3 或压缩后再上传。`;
+				}
+				return;
+			}
 			this.setBusy(true);
 			this.uploadStatus = "正在上传…";
 			this.renderModuleEditor();
