@@ -187,6 +187,10 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		private dataSha = "";
 		/** 模块表单的当前记录（结构化 key: value），保存时序列化回 markdown。 */
 		private moduleRecords: ModuleRecord[] = [];
+		/** 每条记录是否被用户实际编辑过：刚点「添加一条」的空白行不参与必填校验。 */
+		private moduleTouched: boolean[] = [];
+		/** 读取配置时解析到的记录条数，用来区分「本来就是空文件」和「用户删光了」。 */
+		private moduleLoadedCount = 0;
 		/** 模块页顶栏的状态提示文字。 */
 		private moduleState = "配置编辑";
 		/** 模块页的提示 / 错误信息。 */
@@ -315,16 +319,21 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 				this.dataSha = data.sha || "";
 				const records = parseModuleRecords(data.source);
 				this.moduleRecords = normalizeModuleRecords(module, records);
+				this.moduleLoadedCount = this.moduleRecords.length;
 				// 解析不到记录时给一条空记录，让表单字段直接可见，用户不用先点「添加一条」。
 				if (!this.moduleRecords.length) {
 					this.moduleRecords = [createModuleRecord(module)];
 				}
+				// 文件里已有的记录算「已填写」；占位的空行不算，避免误报必填错误。
+				this.moduleTouched = this.moduleRecords.map((_, index) => index < this.moduleLoadedCount);
 				this.moduleLoading = false;
 				this.moduleState = "配置编辑";
 				this.renderModuleEditor();
 			} catch (error) {
 				this.moduleLoading = false;
 				this.moduleRecords = [createModuleRecord(module)];
+				this.moduleLoadedCount = 0;
+				this.moduleTouched = [false];
 				this.moduleState = "读取失败";
 				this.renderModuleEditor(error instanceof Error ? error.message : "配置读取失败。");
 			}
@@ -564,6 +573,8 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 				const key = field.dataset.moduleField;
 				if (key && Number.isInteger(index) && this.moduleRecords[index]) {
 					this.moduleRecords[index][key] = (field as HTMLInputElement).value;
+					// 用户动过的行才开始参与必填校验。
+					this.moduleTouched[index] = true;
 				}
 				this.moduleState = "未保存";
 				this.moduleNotice = "";
@@ -586,16 +597,21 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		private async saveModule() {
 			const module = this.module;
 			if (!module || this.busy) return;
-			// 保存前先做基础校验，避免错误内容进入构建阶段。
-			const problems = validateModuleRecords(module, this.moduleRecords);
+			// 刚点「添加一条」但还没填的空白行不参与校验，其余行按必填规则检查。
+			const skipIndexes = this.moduleTouched
+				.map((touched, index) => (touched ? -1 : index))
+				.filter((index) => index >= 0);
+			const problems = validateModuleRecords(module, this.moduleRecords, { skipIndexes });
 			if (problems.length) {
 				this.moduleState = "请修正后重试";
 				this.moduleNotice = problems.join(" ");
 				this.renderModuleEditor();
 				return;
 			}
-			const source = serializeModuleRecords(this.moduleRecords, module);
-			if (!source.trim()) {
+			// 没填过的空白行不写进文件。
+			const records = this.moduleRecords.filter((_, index) => this.moduleTouched[index] !== false);
+			const source = serializeModuleRecords(records, module);
+			if (!source.trim() && !this.moduleLoadedCount) {
 				this.moduleState = "请修正后重试";
 				this.moduleNotice = "内容不能为空，请至少填写一条记录。";
 				this.renderModuleEditor();
@@ -642,14 +658,6 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 				this.renderModuleEditor();
 				return;
 			}
-			// Cloudflare Pages 单文件上限 25 MiB，超出会在构建阶段被拒绝部署。
-			const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
-			if (file.size > MAX_AUDIO_BYTES) {
-				if (status) {
-					status.textContent = `文件 ${(file.size / 1024 / 1024).toFixed(1)} MiB，超过 Cloudflare Pages 的 25 MiB 上限。请先转成 MP3 或压缩后再上传。`;
-				}
-				return;
-			}
 			this.setBusy(true);
 			this.uploadStatus = "正在上传…";
 			this.renderModuleEditor();
@@ -666,6 +674,8 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 					artist: "",
 					url: data.url,
 				});
+				// 新上传的这条已经有标题和路径，属于有效内容。
+				this.moduleTouched = [...this.moduleTouched.slice(0, this.moduleRecords.length - 1), true];
 				this.moduleRecords = normalizeModuleRecords(this.module, this.moduleRecords);
 				this.moduleState = "未保存";
 				this.uploadStatus = `已上传 ${data.name || file.name}，已添加一条，点保存生效。`;
@@ -693,7 +703,15 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 				const data = await response.json() as { deleted?: boolean; error?: string };
 				if (!response.ok) throw new Error(data.error || "音频文件删除失败。");
 				// 文件已经没了，这条记录也就没有意义，直接从列表里去掉。
-				this.moduleRecords = this.moduleRecords.filter((record) => audioFileName(record.url) !== fileName);
+				const keptRecords: ModuleRecord[] = [];
+				const keptTouched: boolean[] = [];
+				this.moduleRecords.forEach((record, index) => {
+					if (audioFileName(record.url) === fileName) return;
+					keptRecords.push(record);
+					keptTouched.push(this.moduleTouched[index] !== false);
+				});
+				this.moduleRecords = keptRecords;
+				this.moduleTouched = keptTouched;
 				this.moduleState = "未保存";
 				this.uploadStatus = data.deleted
 					? `已删除音频文件 ${fileName}，并从歌单里移除了这条记录。点保存生效。`
@@ -789,6 +807,8 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 			if (button.dataset.moduleAction === "add-record") {
 				if (!this.module) return;
 				this.moduleRecords.push(createModuleRecord(this.module));
+				// 新加的空白行先不算「已填写」，用户动过它之后才参与校验。
+				this.moduleTouched.push(false);
 				this.moduleState = "未保存";
 				this.moduleNotice = "";
 				this.renderModuleEditor();
@@ -802,6 +822,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 				const index = Number(button.dataset.recordIndex);
 				if (!this.module || !Number.isInteger(index) || index < 0 || index >= this.moduleRecords.length) return;
 				this.moduleRecords.splice(index, 1);
+				this.moduleTouched.splice(index, 1);
 				this.moduleState = "未保存";
 				this.moduleNotice = "";
 				this.renderModuleEditor();
@@ -1052,7 +1073,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 	@media (max-width: 780px) {
 		.admin-shell { width: min(100% - 1rem, 44rem); padding-top: .5rem; }
 		/* grid 项默认 min-width:auto，会被图标按钮撑破容器，这里必须用 minmax(0,1fr) */
-.admin-workspace { grid-template-columns: minmax(0, 1fr); height: auto; }
+		.admin-workspace { grid-template-columns: minmax(0, 1fr); height: auto; }
 		.admin-rail { flex-direction: row; justify-content: flex-start; gap: .3rem; padding: .65rem .8rem; border-right: 0; border-bottom: 1px solid #e4eaec; overflow-x: auto; overscroll-behavior-x: contain; }
 		.admin-rail-button { flex: 0 0 auto; width: 2.3rem; }
 		.admin-rail-spacer { flex: 1 1 0; min-width: 0; }
