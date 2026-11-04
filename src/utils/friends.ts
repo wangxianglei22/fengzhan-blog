@@ -3,9 +3,10 @@ export type FriendLink = {
 	url: string;
 	avatar: string;
 	description: string;
+	category: string;
 };
 
-const fields = ["name", "url", "avatar", "description"] as const;
+const fields = ["name", "url", "avatar", "description", "category"] as const;
 
 function isSafeLink(value: string): boolean {
 	return (value.startsWith("/") && !value.startsWith("//")) || /^https?:\/\//i.test(value);
@@ -30,18 +31,30 @@ export function parseFriends(source: string): FriendLink[] {
 
 			if (!values.name && !values.url) return null;
 			if (!values.name || !values.url) {
-				throw new Error(`友链第 ${index + 1} 段缺少 name 或 url。`);
+				throw new Error(`站点第 ${index + 1} 段缺少 name 或 url。`);
 			}
 			if (!isSafeLink(values.url)) {
-				throw new Error(`友链第 ${index + 1} 段的 url 只允许 http(s) 或站内路径。`);
+				throw new Error(`站点第 ${index + 1} 段的 url 只允许 http(s) 或站内路径。`);
 			}
 
 			return {
 				name: values.name,
 				url: values.url,
 				avatar: values.avatar && isSafeLink(values.avatar) ? values.avatar : "",
-				description: values.description || "记录生活与想法的个人空间",
+				description: values.description || "常去的地方，顺手记下来。",
+				category: values.category || "常用",
 			};
 		})
 		.filter((friend): friend is FriendLink => friend !== null);
+}
+
+/** Group links by category, keeping the order of first appearance. */
+export function groupFriendsByCategory(friends: FriendLink[]): { category: string; items: FriendLink[] }[] {
+	const groups: { category: string; items: FriendLink[] }[] = [];
+	for (const friend of friends) {
+		const existing = groups.find((group) => group.category === friend.category);
+		if (existing) existing.items.push(friend);
+		else groups.push({ category: friend.category, items: [friend] });
+	}
+	return groups;
 }

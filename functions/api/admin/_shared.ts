@@ -295,6 +295,17 @@ export async function writeDataFile(env: Env, name: DataFileName, source: string
 	return writeFile(env, dataFilePaths[name], source, message, sha);
 }
 
+/**
+ * 删除仓库里的一个文件（需要先拿到该文件的 sha，GitHub 的删除接口要求带上）。
+ * 文件不存在时返回 false，不报错。
+ */
+export async function deleteRepoFile(env: Env, path: string, message: string) {
+	const existing = await readFile(env, path);
+	if (!existing) return false;
+	await deleteFile(env, path, existing.sha, message);
+	return true;
+}
+
 export async function writeBinaryFile(env: Env, path: string, bytes: Uint8Array, message: string, sha?: string) {
 	const config = getGithubConfig(env);
 	return githubRequest(env, `/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}/contents/${encodePath(path)}`, {

@@ -1,4 +1,4 @@
-import { authenticate, corsHeaders, handleError, json, readDataFile, writeBinaryFile, writeDataFile, unauthorized, type Context } from "./_shared";
+import { authenticate, corsHeaders, deleteRepoFile, handleError, json, readDataFile, writeBinaryFile, writeDataFile, unauthorized, type Context } from "./_shared";
 
 const fallback = `<!-- \u6bcf\u9996\u6b4c\u66f2\u7528\u4e00\u6bb5 --- \u5305\u8d77\u6765\uff0c\u97f3\u9891\u6587\u4ef6\u653e\u5728 public/audio/ -->
 ---
@@ -13,6 +13,27 @@ export const onRequestGet = async ({ request, env }: Context) => {
 	try {
 		const file = await readDataFile(env, "music");
 		return json({ source: file?.source || fallback, sha: file?.sha || "" }, 200, corsHeaders);
+	} catch (error) {
+		return handleError(error);
+	}
+};
+
+/**
+ * 删除已上传的音频文件。
+ * 用法：DELETE /api/admin/music?file=<文件名>
+ * 文件名只允许落在 public/audio/ 下，不接受目录跳转。
+ */
+export const onRequestDelete = async ({ request, env }: Context) => {
+	if (!(await authenticate(request, env))) return unauthorized();
+	try {
+		const raw = new URL(request.url).searchParams.get("file") || "";
+		const name = decodeURIComponent(raw).trim();
+		if (!name) return json({ error: "\u8bf7\u6307\u5b9a\u8981\u5220\u9664\u7684\u97f3\u9891\u6587\u4ef6\u3002" }, 400, corsHeaders);
+		if (name.includes("/") || name.includes("\\") || name.includes("..") || name.startsWith(".")) {
+			return json({ error: "\u97f3\u9891\u6587\u4ef6\u540d\u4e0d\u5408\u6cd5\u3002" }, 400, corsHeaders);
+		}
+		const deleted = await deleteRepoFile(env, `public/audio/${name}`, `\u5220\u9664\u97f3\u9891\uff1a${name}`);
+		return json({ deleted }, 200, corsHeaders);
 	} catch (error) {
 		return handleError(error);
 	}

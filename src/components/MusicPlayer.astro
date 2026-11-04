@@ -120,7 +120,15 @@ const { compact = false, tracks = [] } = Astro.props;
 		playing: boolean;
 		playMode: PlayMode;
 		volume: number;
-		owner: MusicPlayer | null;
+		error: string;
+		/**
+		 * 所有已挂载的 <music-player> 实例。
+		 * 旧实现只有一个 owner，新实例会把旧实例踢掉，导致旧实例的 UI 不再刷新；
+		 * 现在改成「注册表 + 广播」：任意实例触发播放动作后，所有实例一起刷新自己的 DOM。
+		 */
+		players: Set<MusicPlayer>;
+		/** 'ended' 事件会同步派发给每一个实例，用这把锁保证只只切一次歌 */
+		endedGuard: boolean;
 	};
 	const getStoredVolume = () => {
 		try {
@@ -143,27 +151,51 @@ const { compact = false, tracks = [] } = Astro.props;
 		playing: false,
 		playMode: "list",
 		volume: getStoredVolume(),
-		owner: null,
+		error: "",
+		players: new Set<MusicPlayer>(),
+		endedGuard: false,
 	};
+
+	/** 把全局播放状态广播给所有已注册的实例（每个实例只刷新自己的 DOM） */
+	function broadcastState() {
+		musicState.players.forEach((player) => player.refresh());
+	}
+
+	/** 音量是全局的，改动后需要同步所有实例的滑块 */
+	function broadcastVolume() {
+		musicState.players.forEach((player) => player.updateVolumeControls());
+	}
 
 	class MusicPlayer extends HTMLElement {
 		private get audio() { return musicState.audio; }
 		private get tracks() { return musicState.tracks; }
-		private set tracks(value: Track[]) { musicState.tracks = value; }
 		private get currentId() { return musicState.currentId; }
 		private set currentId(value: string) { musicState.currentId = value; }
 		private get playing() { return musicState.playing; }
 		private set playing(value: boolean) { musicState.playing = value; }
 		private get playMode() { return musicState.playMode; }
 		private set playMode(value: PlayMode) { musicState.playMode = value; }
+		// 以下三项是「每个实例自己的」状态：进度条拖动与分页不能被别的实例覆盖
 		private currentPage = 0;
 		private isSeeking = false;
 		private pendingSeekValue: number | null = null;
+		/** 同一个元素被反复挂载时避免重复绑定监听 */
+		private bound = false;
+		/** 上次渲染的曲目 id：用来判断「是否切到了新曲」，
+		 * 切到新曲时才让分页跟踪，不会抢掉用户手动翻的页 */
+		private lastRenderedTrackId = "";
 
 		connectedCallback() {
-			musicState.owner?.detachListeners();
-			musicState.owner = this;
-			this.tracks = this.readTracks();
+			if (this.bound) {
+				this.refresh();
+				return;
+			}
+			this.bound = true;
+			// 注册进实例表：之后任意实例改动播放状态都会广播到所有实例
+			musicState.players.add(this);
+			const localTracks = this.readTracks();
+			// 只有真的读到歌单才写回全局，空歌单不能把别的实例的列表清空
+			if (localTracks.length > 0) musicState.tracks = localTracks;
 			if (!this.tracks.some((track) => track.id === this.currentId)) this.currentId = this.tracks[0]?.id || "";
 			this.currentPage = Math.max(0, Math.floor(this.tracks.findIndex((track) => track.id === this.currentId) / pageSize));
 			this.playing = !this.audio.paused;
@@ -172,12 +204,15 @@ const { compact = false, tracks = [] } = Astro.props;
 			this.syncCurrentTrack(false);
 			this.updateProgress();
 			this.updateVolumeControls();
+			this.paintError();
 			this.addEventListener("click", this.handleClick);
+			// audio 事件由每个实例各自监听：任意一个实例触发播放状态变化，
+			// 都会经由广播让所有已注册实例刷新自己的 DOM
 			this.audio.addEventListener("timeupdate", this.updateProgress);
 			this.audio.addEventListener("loadedmetadata", this.updateProgress);
-			this.audio.addEventListener("play", this.updatePlayingState);
-			this.audio.addEventListener("pause", this.updatePlayingState);
-			this.audio.addEventListener("ended", this.playNext);
+			this.audio.addEventListener("play", this.handlePlayingChange);
+			this.audio.addEventListener("pause", this.handlePlayingChange);
+			this.audio.addEventListener("ended", this.handleEnded);
 			this.audio.addEventListener("error", this.showAudioError);
 			const seek = this.querySelector<HTMLInputElement>("[data-seek]");
 			seek?.addEventListener("pointerdown", this.startSeeking);
@@ -188,13 +223,20 @@ const { compact = false, tracks = [] } = Astro.props;
 			this.querySelectorAll<HTMLInputElement>("[data-volume]").forEach((input) => input.addEventListener("input", this.updateVolume));
 		}
 
+		disconnectedCallback() {
+			// swup 切页会销毁 DOM，必须从实例表注销并解绑，否则会残留监听与死元素
+			musicState.players.delete(this);
+			this.detachListeners();
+			this.bound = false;
+		}
+
 		private detachListeners() {
 			this.removeEventListener("click", this.handleClick);
 			this.audio.removeEventListener("timeupdate", this.updateProgress);
 			this.audio.removeEventListener("loadedmetadata", this.updateProgress);
-			this.audio.removeEventListener("play", this.updatePlayingState);
-			this.audio.removeEventListener("pause", this.updatePlayingState);
-			this.audio.removeEventListener("ended", this.playNext);
+			this.audio.removeEventListener("play", this.handlePlayingChange);
+			this.audio.removeEventListener("pause", this.handlePlayingChange);
+			this.audio.removeEventListener("ended", this.handleEnded);
 			this.audio.removeEventListener("error", this.showAudioError);
 			const seek = this.querySelector<HTMLInputElement>("[data-seek]");
 			seek?.removeEventListener("pointerdown", this.startSeeking);
@@ -212,6 +254,30 @@ const { compact = false, tracks = [] } = Astro.props;
 			} catch {
 				return [];
 			}
+		}
+
+		/** 把全局状态同步到本实例的 DOM（可对任意实例调用） */
+		refresh() {
+			this.playing = !this.audio.paused;
+			this.syncCurrentTrack(false);
+			this.syncCurrentPage();
+			this.renderTracks();
+			this.updateProgress();
+			this.updateVolumeControls();
+			this.paintError();
+		}
+
+		/**
+		 * 切到新曲时，让分页跟到当前曲所在页，
+		 * 这样其他实例引发的播放动作也能把正在播的曲展示出来。
+		 * 每个实例仍然各自维护 currentPage，手动翻页不会被广播打断。
+		 */
+		private syncCurrentPage() {
+			if (!this.currentId || this.currentId === this.lastRenderedTrackId) return;
+			const index = this.tracks.findIndex((track) => track.id === this.currentId);
+			if (index < 0) return;
+			this.lastRenderedTrackId = this.currentId;
+			this.currentPage = Math.floor(index / pageSize);
 		}
 
 		private renderTracks() {
@@ -277,6 +343,7 @@ const { compact = false, tracks = [] } = Astro.props;
 			const track = this.tracks.find((item) => item.id === id);
 			if (!track) return;
 			this.currentPage = Math.floor(this.tracks.indexOf(track) / pageSize);
+			this.lastRenderedTrackId = id;
 			this.updatePagination();
 			if (this.currentId !== id || this.audio.src !== new URL(track.url, location.href).href) {
 				this.currentId = id;
@@ -284,12 +351,14 @@ const { compact = false, tracks = [] } = Astro.props;
 				this.audio.load();
 			}
 			this.updateCurrentLabels(track);
-			this.showError("");
+			this.setError("");
+			// 换歌后立刻让所有实例同步歌名与高亮
+			broadcastState();
 			try {
 				await this.audio.play();
 			} catch (error) {
 				if (error instanceof DOMException && error.name === "AbortError") return;
-				this.showError("无法播放这首歌，请检查音频文件格式是否受浏览器支持。");
+				this.setError("无法播放这首歌，请检查音频文件格式是否受浏览器支持。");
 			}
 		}
 
@@ -316,8 +385,10 @@ const { compact = false, tracks = [] } = Astro.props;
 					this.querySelectorAll<HTMLButtonElement>("[data-action='set-mode']").forEach((option) => {
 						option.setAttribute("aria-pressed", String(option.dataset.playMode === mode));
 					});
+					broadcastState();
 				}
 			}
+			// 分页是每个实例自己的状态，只刷新当前实例
 			if (button.dataset.action === "previous-page" && this.currentPage > 0) {
 				this.currentPage -= 1;
 				this.updatePagination();
@@ -328,11 +399,30 @@ const { compact = false, tracks = [] } = Astro.props;
 			}
 		};
 
-		private updatePlayingState = () => {
+		/** audio 的 play / pause：先更新自己，再广播给所有实例 */
+		private handlePlayingChange = () => {
+			this.updatePlayingState();
+			broadcastState();
+		};
+
+		/** audio 的 ended：多个实例都会收到，用锁保证只切一次歌 */
+		private handleEnded = () => {
+			if (musicState.endedGuard) return;
+			musicState.endedGuard = true;
+			try {
+				this.playNext();
+			} finally {
+				setTimeout(() => {
+					musicState.endedGuard = false;
+				}, 0);
+			}
+		};
+
+		updatePlayingState() {
 			this.playing = !this.audio.paused;
 			this.updateCurrentLabels();
 			this.renderTracks();
-		};
+		}
 
 		private updateVolume = (event: Event) => {
 			const input = event.currentTarget as HTMLInputElement;
@@ -341,10 +431,10 @@ const { compact = false, tracks = [] } = Astro.props;
 			musicState.volume = Math.max(0, Math.min(1, value / 100));
 			this.audio.volume = musicState.volume;
 			try { localStorage.setItem("blog-music-volume", String(musicState.volume)); } catch {}
-			this.updateVolumeControls();
+			broadcastVolume();
 		};
 
-		private updateVolumeControls() {
+		updateVolumeControls() {
 			const value = Math.round(musicState.volume * 100);
 			this.querySelectorAll<HTMLInputElement>("[data-volume]").forEach((input) => {
 				input.value = String(value);
@@ -425,19 +515,26 @@ const { compact = false, tracks = [] } = Astro.props;
 			this.pendingSeekValue = null;
 			this.isSeeking = false;
 			this.updateProgress();
-		};
+		}
 
 		private formatTime(seconds: number) {
 			if (!Number.isFinite(seconds)) return "0:00";
 			return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 		}
 
-		private showAudioError = () => this.showError("音频加载失败，请稍后重试或换一首试试。");
-		private showError(message: string) {
+		private showAudioError = () => this.setError("音频加载失败，请稍后重试或换一首试试。");
+
+		/** 错误信息是全局的：任何一个实例报错，所有实例都提示 */
+		private setError(message: string) {
+			musicState.error = message;
+			musicState.players.forEach((player) => player.paintError());
+		}
+
+		paintError() {
 			const error = this.querySelector<HTMLElement>("[data-error]");
 			if (error) {
-				error.textContent = message;
-				error.hidden = !message;
+				error.textContent = musicState.error;
+				error.hidden = !musicState.error;
 			}
 		}
 	}

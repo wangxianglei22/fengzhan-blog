@@ -24,7 +24,7 @@ export const navBarConfig: NavBarConfig = {
 		{ name: "文章总览", url: "/archive/" },
 		{ name: "日记", url: "/diary/" },
 		{ name: "音乐", url: "/music/" },
-		{ name: "友链", url: "/friends/" },
+		{ name: "常用网站", url: "/friends/" },
 		{ name: "留言板", url: "/guestbook/" },
 		LinkPreset.About,
 	],

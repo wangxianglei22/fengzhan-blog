@@ -1,0 +1,139 @@
+---
+import musicSource from "../data/music.md?raw";
+import { parseMusic } from "../utils/music";
+import MusicPlayer from "./MusicPlayer.astro";
+
+const tracks = parseMusic(musicSource);
+---
+
+<!--
+	全局悬浮迷你播放器。
+	这个节点被放在 Layout.astro 的 <body> 里、swup 容器（#page-shell / #toc）之外，
+	所以切换页面时不会被替换，播放状态与控制条都能一直保留。
+-->
+<div class="global-music-bar" data-global-music-bar>
+	<MusicPlayer compact tracks={tracks} />
+</div>
+
+<script>
+	// 暂停后延迟淡出的时间（毫秒）
+	const HIDE_DELAY = 3000;
+
+	class GlobalMusicBarController {
+		private bar: HTMLElement;
+		private hideTimer: number | null = null;
+
+		constructor(bar: HTMLElement) {
+			this.bar = bar;
+			// <audio id="blog-global-audio"> 同样在 body 里、swup 容器之外，切页不会丢
+			const audio = document.getElementById("blog-global-audio");
+			if (!(audio instanceof HTMLAudioElement)) return;
+			audio.addEventListener("play", this.handlePlay);
+			audio.addEventListener("pause", this.handlePause);
+			audio.addEventListener("ended", this.handlePause);
+			// 刷新页面时如果本来就在播放中，直接显示
+			if (!audio.paused) this.show();
+		}
+
+		private handlePlay = () => this.show();
+
+		private handlePause = () => {
+			this.clearTimer();
+			this.hideTimer = window.setTimeout(() => {
+				this.hideTimer = null;
+				this.hide();
+			}, HIDE_DELAY);
+		};
+
+		/** 切页后重新对齐一次显隐状态 */
+		sync() {
+			const audio = document.getElementById("blog-global-audio");
+			if (audio instanceof HTMLAudioElement && !audio.paused) this.show();
+		}
+
+		private clearTimer() {
+			if (this.hideTimer !== null) {
+				window.clearTimeout(this.hideTimer);
+				this.hideTimer = null;
+			}
+		}
+
+		show() {
+			this.clearTimer();
+			this.bar.classList.add("is-visible");
+			document.documentElement.classList.add("has-global-music-bar");
+		}
+
+		hide() {
+			this.bar.classList.remove("is-visible");
+			document.documentElement.classList.remove("has-global-music-bar");
+		}
+	}
+
+	// swup 切页会重新执行页面里的脚本，用全局标记保证只初始化一次
+	const musicWindow = window as Window & { __blogGlobalMusicBar?: GlobalMusicBarController };
+	if (!musicWindow.__blogGlobalMusicBar) {
+		const bar = document.querySelector<HTMLElement>("[data-global-music-bar]");
+		if (bar) musicWindow.__blogGlobalMusicBar = new GlobalMusicBarController(bar);
+	}
+	document.addEventListener("astro:page-load", () => musicWindow.__blogGlobalMusicBar?.sync());
+</script>
+
+<style>
+	.global-music-bar {
+		position: fixed;
+		right: 1rem;
+		bottom: 1rem;
+		z-index: 60;
+		width: min(22rem, calc(100vw - 2rem));
+		opacity: 0;
+		visibility: hidden;
+		pointer-events: none;
+		transform: translateY(0.6rem);
+		transition: opacity 220ms ease, transform 220ms ease, visibility 0s linear 220ms;
+	}
+
+	.global-music-bar.is-visible {
+		opacity: 1;
+		visibility: visible;
+		pointer-events: auto;
+		transform: translateY(0);
+		transition: opacity 220ms ease, transform 220ms ease, visibility 0s;
+	}
+
+	/* 迷你播放器自带卡片底，这里统一成全局条的圆角卡片风格（选择器权重更高，避免被组件样式盖掉） */
+	:global(html .global-music-bar .mini-player-shell) {
+		border-radius: 1rem;
+		background: color-mix(in srgb, var(--card-bg) 82%, transparent);
+		box-shadow: 0 0.55rem 1.6rem color-mix(in srgb, var(--deep-text) 13%, transparent);
+		backdrop-filter: blur(16px);
+		-webkit-backdrop-filter: blur(16px);
+	}
+
+	/* 悬浮条出现时给页脚留出空间，避免遮住页脚内容 */
+	:global(html.has-global-music-bar .footer) {
+		padding-bottom: 3rem;
+	}
+
+	@media (max-width: 767px) {
+		.global-music-bar {
+			width: calc(100vw - 2rem);
+		}
+
+		:global(html .global-music-bar .mini-player-shell) {
+			background: color-mix(in srgb, var(--card-bg) 94%, transparent);
+		}
+
+		:global(html.has-global-music-bar .footer) {
+			padding-bottom: 5.5rem;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.global-music-bar,
+		.global-music-bar.is-visible {
+			transform: none;
+			transition: none;
+		}
+	}
+</style>

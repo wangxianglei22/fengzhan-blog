@@ -85,8 +85,17 @@ import "@fontsource/roboto/700.css";
 </html>
 
 <script>
+	import {
+		createModuleRecord,
+		getModuleFields,
+		normalizeModuleRecords,
+		parseModuleRecords,
+		serializeModuleRecords,
+		validateModuleRecords,
+	} from "../../utils/admin-module-forms";
+	import type { AdminModule, ModuleField, ModuleRecord } from "../../utils/admin-module-forms";
+
 	type CollectionName = "posts" | "diary";
-	type AdminModule = "music" | "honors" | "guestbook" | "friends";
 	type Entry = {
 		collection: CollectionName;
 		slug: string;
@@ -110,7 +119,19 @@ import "@fontsource/roboto/700.css";
 	};
 
 	const today = () => new Date().toISOString().slice(0, 10);
-	const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
+	/**
+ * 从 /audio/xxx.mp3 里取出文件名（用于删除音频文件）。
+ * 只处理单层文件名，不接受目录跳转。
+ */
+const audioFileName = (url: string) => {
+	const raw = String(url || "").trim();
+	if (!raw.startsWith("/audio/")) return "";
+	const name = decodeURIComponent(raw.slice("/audio/".length));
+	if (!name || name.includes("/") || name.includes("\\") || name.includes("..")) return "";
+	return name;
+};
+
+const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
 		"&": "&amp;",
 		"<": "&lt;",
 		">": "&gt;",
@@ -163,8 +184,17 @@ import "@fontsource/roboto/700.css";
 		private module: AdminModule | null = null;
 		private items: Entry[] = [];
 		private current: Entry | null = null;
-		private dataSource = "";
 		private dataSha = "";
+		/** 模块表单的当前记录（结构化 key: value），保存时序列化回 markdown。 */
+		private moduleRecords: ModuleRecord[] = [];
+		/** 模块页顶栏的状态提示文字。 */
+		private moduleState = "配置编辑";
+		/** 模块页的提示 / 错误信息。 */
+		private moduleNotice = "";
+		/** 音频上传区的状态文字。 */
+		private uploadStatus = "";
+		/** 是否正在读取模块配置。 */
+		private moduleLoading = false;
 		private notice = "";
 		private busy = false;
 
@@ -269,55 +299,124 @@ import "@fontsource/roboto/700.css";
 		}
 
 		private async loadModule() {
-			if (!this.module) return;
-			this.dataSource = "\u6b63\u5728\u8bfb\u53d6\u914d\u7f6e\u2026";
+			const module = this.module;
+			if (!module) return;
+			this.moduleLoading = true;
 			this.dataSha = "";
+			this.moduleRecords = [];
+			this.moduleNotice = "";
+			this.uploadStatus = "";
+			this.moduleState = "正在读取配置…";
 			this.renderModuleEditor();
 			try {
-				const response = await fetch(`/api/admin/${this.module}`, { credentials: "same-origin" });
+				const response = await fetch(`/api/admin/${module}`, { credentials: "same-origin" });
 				const data = await response.json() as { source?: string; sha?: string; error?: string };
-				if (!response.ok || typeof data.source !== "string") throw new Error(data.error || "\u914d\u7f6e\u8bfb\u53d6\u5931\u8d25\u3002");
-				this.dataSource = data.source;
+				if (!response.ok || typeof data.source !== "string") throw new Error(data.error || "配置读取失败。");
 				this.dataSha = data.sha || "";
+				const records = parseModuleRecords(data.source);
+				this.moduleRecords = normalizeModuleRecords(module, records);
+				// 解析不到记录时给一条空记录，让表单字段直接可见，用户不用先点「添加一条」。
+				if (!this.moduleRecords.length) {
+					this.moduleRecords = [createModuleRecord(module)];
+				}
+				this.moduleLoading = false;
+				this.moduleState = "配置编辑";
 				this.renderModuleEditor();
 			} catch (error) {
-				this.dataSource = "";
-				this.renderModuleEditor(error instanceof Error ? error.message : "\u914d\u7f6e\u8bfb\u53d6\u5931\u8d25\u3002");
+				this.moduleLoading = false;
+				this.moduleRecords = [createModuleRecord(module)];
+				this.moduleState = "读取失败";
+				this.renderModuleEditor(error instanceof Error ? error.message : "配置读取失败。");
 			}
 		}
 
-		private moduleTemplate() {
-			if (this.module === "music") return `\n---\ntitle: \u6b4c\u66f2\u540d\u79f0\nartist: \u6b4c\u624b\u540d\u79f0\nurl: /audio/song.mp3\n---\n`;
-			if (this.module === "honors") return `\n---\ndate: 2026-01\nname: \u5956\u9879\u540d\u79f0\nissuer: \u9881\u53d1\u5355\u4f4d\naward: \u83b7\u5f97\u7b49\u7ea7\n---\n`;
-			if (this.module === "friends") return `\n---\nname: \u670b\u53cb\u7684\u535a\u5ba2\nurl: https://your-blog.pages.dev\navatar: https://your-blog.pages.dev/avatar.png\ndescription: \u5206\u4eab\u6280\u672f\u3001\u751f\u6d3b\u548c\u6b63\u5728\u5b66\u4e60\u7684\u4e8b\u60c5\n---\n`;
-			return `\n---\ntitle: \u7559\u8a00\u677f\ndescription: \u7559\u4e0b\u4f60\u7684\u60f3\u6cd5\uff0c\u548c\u6211\u6253\u4e2a\u62db\u547c\u5427\u3002\nenvId: https://\u4f60\u7684-twikoo-\u670d\u52a1\u5730\u5740\n---\n`;
+		/** 渲染单个字段的输入控件。 */
+		private renderModuleField(field: ModuleField, record: ModuleRecord, index: number) {
+			const value = String(record[field.key] ?? "");
+			const attrs = `data-module-field="${escapeHtml(field.key)}" data-record-index="${index}"`;
+			const placeholder = escapeHtml(field.placeholder || "");
+			let control = "";
+			if (field.kind === "textarea") {
+				control = `<textarea class="admin-module-textarea" ${attrs} placeholder="${placeholder}" rows="3">${escapeHtml(value)}</textarea>`;
+			} else if (field.kind === "date") {
+				control = `<input type="date" ${attrs} value="${escapeHtml(value)}" placeholder="${placeholder}" />`;
+			} else if (field.kind === "url") {
+				// 站内相对路径不是合法 URL，用 text + inputmode 避免浏览器判定输入无效。
+				control = `<input type="text" inputmode="url" ${attrs} value="${escapeHtml(value)}" placeholder="${placeholder}" />`;
+			} else {
+				control = `<input type="text" ${attrs} value="${escapeHtml(value)}" placeholder="${placeholder}" />`;
+			}
+			const hint = field.hint ? `<small class="admin-field-hint">${escapeHtml(field.hint)}</small>` : "";
+			const wide = field.kind === "textarea" ? ` class="admin-field-wide"` : "";
+			return `<label${wide}>${escapeHtml(field.label)}${control}${hint}</label>`;
+		}
+
+		/** 渲染一条记录卡片（guestbook 只渲染一条且不带删除按钮）。 */
+		private renderModuleRecord(module: AdminModule, fields: ModuleField[], record: ModuleRecord, index: number, isGuestbook: boolean) {
+			const controls = fields.map((field) => this.renderModuleField(field, record, index)).join("");
+			const head = isGuestbook
+				? `<header class="admin-record-head"><strong>留言板配置</strong></header>`
+				: `<header class="admin-record-head"><strong>第 ${index + 1} 条</strong></header>`;
+			const audioFile = module === "music" ? audioFileName(record.url) : "";
+			const audioButton = audioFile
+				? `<button class="admin-secondary-button admin-danger-button" data-module-action="delete-audio-file" data-audio-file="${escapeHtml(audioFile)}" type="button">${icon("trash")} 删除音频文件</button>`
+				: "";
+			const foot = isGuestbook
+				? ""
+				: `<footer class="admin-record-foot">${audioButton}<button class="admin-secondary-button admin-danger-button" data-module-action="remove-record" data-record-index="${index}" type="button">${icon("trash")} 删除这条</button></footer>`;
+			return `<article class="admin-record-card">${head}<div class="admin-form-grid">${controls}</div>${foot}</article>`;
 		}
 
 		private renderModuleEditor(error = "") {
 			const editor = this.querySelector<HTMLElement>("[data-editor]");
-			if (!editor || !this.module) return;
-			const source = this.dataSource === "\u6b63\u5728\u8bfb\u53d6\u914d\u7f6e\u2026" ? "" : this.dataSource;
-			const helper = this.module === "music"
-				? "\u6bcf\u9996\u6b4c\u66f2\u4f7f\u7528\u4e00\u6bb5 --- \u5305\u8d77\u6765\u3002"
-				: this.module === "honors"
-					? "\u6bcf\u9879\u8363\u8a89\u4f7f\u7528\u4e00\u6bb5 --- \u5305\u8d77\u6765\uff0c\u53ef\u586b\u5199 date\u3001name\u3001issuer\u3001award\u3002"
-					: this.module === "friends"
-						? "\u6bcf\u4e2a\u597d\u53cb\u4f7f\u7528\u4e00\u6bb5 --- \u5305\u8d77\u6765\uff0c\u586b\u5199 name\u3001url\u3001avatar \u548c description\u3002"
-						: "envId \u586b\u5199\u7559\u8a00\u677f\u670d\u52a1\u5730\u5740\uff1btitle \u548c description \u4f1a\u663e\u793a\u5728\u7559\u8a00\u677f\u9876\u90e8\u3002";
-			const guestbookAdminLink = this.module === "guestbook"
-				? `<a class="admin-secondary-button admin-admin-link" href="/guestbook/?admin=1" target="_blank" rel="noopener noreferrer">\u7ba1\u7406\u73b0\u6709\u7559\u8a00 \u2197</a>`
+			const module = this.module;
+			if (!editor || !module) return;
+			const fields = getModuleFields(module);
+			const isGuestbook = module === "guestbook";
+			const notice = error || this.moduleNotice;
+			const stateText = this.moduleLoading ? "正在读取配置…" : this.moduleState;
+			const guestbookAdminLink = isGuestbook
+				? `<a class="admin-secondary-button admin-admin-link" href="/guestbook/?admin=1" target="_blank" rel="noopener noreferrer">管理现有留言 ↗</a>`
 				: "";
-			editor.innerHTML = `<div class="admin-editor-topbar">
-				<button class="admin-back-button" data-action="module-back" type="button">${icon("back")}<span>\u8fd4\u56de\u5185\u5bb9\u7ba1\u7406</span></button>
-				<span class="admin-save-state" role="status">${error ? "\u8bfb\u53d6\u5931\u8d25" : this.notice || "\u914d\u7f6e\u7f16\u8f91"}</span>
-				<div class="admin-editor-actions">${guestbookAdminLink}<button class="admin-secondary-button" data-module-action="template" type="button">\u63d2\u5165\u6a21\u677f</button><button class="admin-primary-button" data-module-action="save" type="button">\u4fdd\u5b58\u914d\u7f6e</button></div>
+			const helper = module === "music"
+				? "每条记录是一首歌曲，填写歌曲名、歌手和 /audio/ 下的音频路径。"
+				: module === "honors"
+					? "每条记录是一项荣誉，日期用 YYYY-MM 格式。"
+					: module === "friends"
+						? "每条记录是一位好友，链接只允许 http(s) 地址或站内路径。"
+						: "留言板只有一条配置，保存后立即生效。";
+			const records = this.moduleRecords;
+			const list = this.moduleLoading
+				? `<div class="admin-list-empty">正在读取配置…</div>`
+				: records.length
+					? records.map((record, index) => this.renderModuleRecord(module, fields, record, index, isGuestbook)).join("")
+					: `<div class="admin-list-empty"><strong>还没有内容</strong><span>点击下方「添加一条」开始编辑。</span></div>`;
+			const addButton = isGuestbook
+				? ""
+				: `<div class="admin-module-add"><button class="admin-secondary-button" data-module-action="add-record" type="button">${icon("plus")} 添加一条</button></div>`;
+			const upload = module === "music"
+				? `<div class="admin-audio-upload"><label><span>上传本地音频</span><input type="file" accept="audio/*,.mp3,.m4a,.ogg,.wav,.flac,.aac" data-audio-file /></label><button class="admin-secondary-button" data-module-action="upload" type="button">上传并添加</button><small data-upload-status>${escapeHtml(this.uploadStatus || "将文件提交到输入目录")}</small></div>`
+				: "";
+			const tip = module === "music"
+				? "这里只编辑歌曲名、歌手和音频文件路径。"
+				: module === "honors"
+					? "保存后关于页面会自动读取并分页显示，每页最多 5 项。"
+					: module === "friends"
+						? "url 使用 http(s) 地址；avatar 可以是 /images/ 下的本地图片或 https 图片地址。"
+						: "留言内容保存后即可生效。";
+			editor.innerHTML = `<div class="admin-editor-topbar admin-module-topbar">
+				<span class="admin-save-state" role="status">${escapeHtml(stateText)}</span>
+				<div class="admin-editor-actions">${guestbookAdminLink}<button class="admin-primary-button" data-module-action="save" type="button">保存配置</button></div>
 			</div>
-			${error ? `<p class="admin-notice">${escapeHtml(error)}</p>` : ""}
+			${notice ? `<p class="admin-notice" data-module-notice>${escapeHtml(notice)}</p>` : `<p class="admin-notice" data-module-notice hidden></p>`}
 			<div class="admin-module-editor">
-				<div class="admin-module-heading"><div class="admin-module-heading-icon">${icon(this.module)}</div><div><p class="admin-eyebrow">${this.module.toUpperCase()} SETTINGS</p><h2>${this.moduleTitle()}</h2><p>${helper}</p></div></div>
-				${this.module === "music" ? `<div class="admin-audio-upload"><label><span>\u4e0a\u4f20\u672c\u5730\u97f3\u9891</span><input type="file" accept="audio/*,.mp3,.m4a,.ogg,.wav,.flac,.aac" data-audio-file /></label><button class="admin-secondary-button" data-module-action="upload" type="button">\u4e0a\u4f20\u5e76\u6dfb\u52a0</button><small data-upload-status>\u5c06\u6587\u4ef6\u63d0\u4ea4\u5230\u8f93\u5165\u76ee\u5f55</small></div>` : ""}
-				<label class="admin-module-source-label">\u914d\u7f6e\u5185\u5bb9<textarea class="admin-module-source" data-module-source spellcheck="false" aria-label="${this.moduleTitle()}\u914d\u7f6e">${escapeHtml(source)}</textarea></label>
-				<div class="admin-module-tip"><strong>\u4fdd\u5b58\u524d\u68c0\u67e5</strong><span>${this.module === "music" ? "\u8fd9\u91cc\u53ea\u7f16\u8f91\u6b4c\u66f2\u540d\u79f0\u3001\u6b4c\u624b\u548c\u6587\u4ef6\u8def\u5f84\u3002" : this.module === "honors" ? "\u4fdd\u5b58\u540e\u5173\u4e8e\u9875\u9762\u4f1a\u81ea\u52a8\u8bfb\u53d6\u5e76\u5206\u9875\u663e\u793a\uff0c\u6bcf\u9875\u6700\u591a 5 \u9879\u3002" : this.module === "friends" ? "url \u4f7f\u7528 http(s) \u7f51\u5740\uff1bavatar \u53ef\u4ee5\u662f /images/ \u4e0b\u7684\u672c\u5730\u56fe\u7247\u6216 https \u56fe\u7247\u5730\u5740\u3002" : "\u7559\u8a00\u5185\u5bb9\u4fdd\u5b58\u540e\u5373\u53ef\u751f\u6548\u3002"}</span></div>
+				<div class="admin-module-heading"><div class="admin-module-heading-icon">${icon(module)}</div><div><p class="admin-eyebrow">${module.toUpperCase()} SETTINGS</p><h2>${this.moduleTitle()}</h2><p>${helper}</p></div></div>
+				${upload}
+				<form id="module-form" class="admin-module-form">
+					${list}
+					${addButton}
+				</form>
+				<div class="admin-module-tip"><strong>保存前检查</strong><span>${tip}</span></div>
 			</div>`;
 		}
 
@@ -458,9 +557,23 @@ import "@fontsource/roboto/700.css";
 
 		private handleInput(event: Event) {
 			if (!(event.target instanceof Element)) return;
-			if (event.target.closest("[data-module-source]")) {
+			const field = event.target.closest<HTMLElement>("[data-module-field]");
+			if (field) {
+				// 表单输入直接写回结构化记录，只改状态文字，不重渲染（避免丢焦点）。
+				const index = Number(field.dataset.recordIndex);
+				const key = field.dataset.moduleField;
+				if (key && Number.isInteger(index) && this.moduleRecords[index]) {
+					this.moduleRecords[index][key] = (field as HTMLInputElement).value;
+				}
+				this.moduleState = "未保存";
+				this.moduleNotice = "";
 				const state = this.querySelector<HTMLElement>(".admin-save-state");
 				if (state) state.textContent = "未保存";
+				const notice = this.querySelector<HTMLElement>("[data-module-notice]");
+				if (notice) {
+					notice.textContent = "";
+					notice.hidden = true;
+				}
 				return;
 			}
 			if (!event.target.closest("#editor-form")) return;
@@ -471,27 +584,43 @@ import "@fontsource/roboto/700.css";
 		}
 
 		private async saveModule() {
-			if (!this.module || this.busy) return;
-			const area = this.querySelector<HTMLTextAreaElement>("[data-module-source]");
-			if (!area || !area.value.trim()) return;
+			const module = this.module;
+			if (!module || this.busy) return;
+			// 保存前先做基础校验，避免错误内容进入构建阶段。
+			const problems = validateModuleRecords(module, this.moduleRecords);
+			if (problems.length) {
+				this.moduleState = "请修正后重试";
+				this.moduleNotice = problems.join(" ");
+				this.renderModuleEditor();
+				return;
+			}
+			const source = serializeModuleRecords(this.moduleRecords, module);
+			if (!source.trim()) {
+				this.moduleState = "请修正后重试";
+				this.moduleNotice = "内容不能为空，请至少填写一条记录。";
+				this.renderModuleEditor();
+				return;
+			}
 			this.setBusy(true);
 			const state = this.querySelector<HTMLElement>(".admin-save-state");
 			if (state) state.textContent = "正在保存…";
 			try {
-				const response = await fetch(`/api/admin/${this.module}`, {
+				const response = await fetch(`/api/admin/${module}`, {
 					method: "POST",
 					headers: { "content-type": "application/json" },
 					credentials: "same-origin",
-					body: JSON.stringify({ source: area.value, sha: this.dataSha }),
+					body: JSON.stringify({ source, sha: this.dataSha }),
 				});
 				const data = await response.json() as { saved?: boolean; sha?: string; error?: string };
 				if (!response.ok || !data.saved) throw new Error(data.error || "保存配置失败。");
 				this.dataSha = data.sha || this.dataSha;
-				this.notice = "已保存，Cloudflare Pages 会自动构建网站。";
-				if (state) state.textContent = "已保存";
+				this.moduleState = "已保存";
+				this.moduleNotice = "已保存，Cloudflare Pages 会自动构建网站。";
+				this.renderModuleEditor();
 			} catch (error) {
-				const message = error instanceof Error ? error.message : "保存配置失败。";
-				if (state) state.textContent = message;
+				this.moduleState = "保存失败";
+				this.moduleNotice = error instanceof Error ? error.message : "保存配置失败。";
+				this.renderModuleEditor();
 			} finally {
 				this.setBusy(false);
 			}
@@ -501,36 +630,70 @@ import "@fontsource/roboto/700.css";
 			if (this.module !== "music" || this.busy) return;
 			const input = this.querySelector<HTMLInputElement>("[data-audio-file]");
 			const file = input?.files?.[0];
-			const status = this.querySelector<HTMLElement>("[data-upload-status]");
 			if (!file) {
-				if (status) status.textContent = "请选择音频文件。";
+				this.uploadStatus = "请选择音频文件。";
+				this.renderModuleEditor();
 				return;
 			}
 			// Cloudflare Pages 单文件上限 25 MiB，超出会在构建阶段被拒绝部署。
 			const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 			if (file.size > MAX_AUDIO_BYTES) {
-				if (status) {
-					status.textContent = `文件 ${(file.size / 1024 / 1024).toFixed(1)} MiB，超过 Cloudflare Pages 的 25 MiB 上限。请先转成 MP3 或压缩后再上传。`;
-				}
+				this.uploadStatus = `文件 ${(file.size / 1024 / 1024).toFixed(1)} MiB，超过 Cloudflare Pages 的 25 MiB 上限。请先转成 MP3 或压缩后再上传。`;
+				this.renderModuleEditor();
 				return;
 			}
 			this.setBusy(true);
-			if (status) status.textContent = "正在上传…";
+			this.uploadStatus = "正在上传…";
+			this.renderModuleEditor();
 			try {
 				const form = new FormData();
 				form.append("file", file);
 				const response = await fetch("/api/admin/music", { method: "POST", credentials: "same-origin", body: form });
 				const data = await response.json() as { uploaded?: boolean; url?: string; name?: string; error?: string };
 				if (!response.ok || !data.uploaded || !data.url) throw new Error(data.error || "音频上传失败。");
-				const area = this.querySelector<HTMLTextAreaElement>("[data-module-source]");
-				if (area) {
-					const title = file.name.replace(/\.[^.]+$/, "");
-					area.value = `${area.value.trimEnd()}\n---\ntitle: ${title}\nartist: 未知歌手\nurl: ${data.url}\n---\n`.trimStart();
-					area.dispatchEvent(new Event("input", { bubbles: true }));
-				}
-				if (status) status.textContent = `已上传 ${data.name || file.name}，请保存配置。`;
+				// 上传成功后直接往结构化记录里追加一条，歌手留空等用户补。
+				const title = file.name.replace(/\.[^.]+$/, "");
+				this.moduleRecords.push({
+					title,
+					artist: "",
+					url: data.url,
+				});
+				this.moduleRecords = normalizeModuleRecords(this.module, this.moduleRecords);
+				this.moduleState = "未保存";
+				this.uploadStatus = `已上传 ${data.name || file.name}，已添加一条，点保存生效。`;
+				this.renderModuleEditor();
 			} catch (error) {
-				if (status) status.textContent = error instanceof Error ? error.message : "音频上传失败。";
+				this.uploadStatus = error instanceof Error ? error.message : "音频上传失败。";
+				this.renderModuleEditor();
+			} finally {
+				this.setBusy(false);
+			}
+		}
+
+		/** 删除已上传的音频文件（同时把它从歌单记录里去掉）。 */
+		private async deleteAudioFile(fileName: string) {
+			if (!fileName || this.busy) return;
+			if (!confirm(`确定删除音频文件“${fileName}”吗？此操作会提交 GitHub 删除文件。`)) return;
+			this.setBusy(true);
+			this.uploadStatus = "正在删除音频文件…";
+			this.renderModuleEditor();
+			try {
+				const response = await fetch(`/api/admin/music?file=${encodeURIComponent(fileName)}`, {
+					method: "DELETE",
+					credentials: "same-origin",
+				});
+				const data = await response.json() as { deleted?: boolean; error?: string };
+				if (!response.ok) throw new Error(data.error || "音频文件删除失败。");
+				// 文件已经没了，这条记录也就没有意义，直接从列表里去掉。
+				this.moduleRecords = this.moduleRecords.filter((record) => audioFileName(record.url) !== fileName);
+				this.moduleState = "未保存";
+				this.uploadStatus = data.deleted
+					? `已删除音频文件 ${fileName}，并从歌单里移除了这条记录。点保存生效。`
+					: `仓库里没有找到 ${fileName}，已从歌单里移除了这条记录。点保存生效。`;
+				this.renderModuleEditor();
+			} catch (error) {
+				this.uploadStatus = error instanceof Error ? error.message : "音频文件删除失败。";
+				this.renderModuleEditor();
 			} finally {
 				this.setBusy(false);
 			}
@@ -615,12 +778,25 @@ import "@fontsource/roboto/700.css";
 				await this.uploadAudio();
 				return;
 			}
-			if (button.dataset.moduleAction === "template") {
-				const area = this.querySelector<HTMLTextAreaElement>("[data-module-source]");
-				if (area) {
-					area.value = `${area.value.trimEnd()}\n${this.moduleTemplate()}`.trimStart();
-					area.dispatchEvent(new Event("input", { bubbles: true }));
-				}
+			if (button.dataset.moduleAction === "add-record") {
+				if (!this.module) return;
+				this.moduleRecords.push(createModuleRecord(this.module));
+				this.moduleState = "未保存";
+				this.moduleNotice = "";
+				this.renderModuleEditor();
+				return;
+			}
+			if (button.dataset.moduleAction === "delete-audio-file") {
+				await this.deleteAudioFile(button.dataset.audioFile || "");
+				return;
+			}
+			if (button.dataset.moduleAction === "remove-record") {
+				const index = Number(button.dataset.recordIndex);
+				if (!this.module || !Number.isInteger(index) || index < 0 || index >= this.moduleRecords.length) return;
+				this.moduleRecords.splice(index, 1);
+				this.moduleState = "未保存";
+				this.moduleNotice = "";
+				this.renderModuleEditor();
 				return;
 			}
 			if (button.dataset.kind) {
@@ -633,12 +809,6 @@ import "@fontsource/roboto/700.css";
 				return;
 			}
 			switch (button.dataset.action) {
-				case "module-back":
-					this.module = null;
-					this.notice = "";
-					this.renderWorkspace();
-					await this.loadItems();
-					break;
 				case "new":
 					this.current = emptyEntry(this.kind);
 					this.notice = "";
@@ -845,10 +1015,16 @@ import "@fontsource/roboto/700.css";
 	.admin-audio-upload label { display: flex; align-items: center; gap: .65rem; color: #65757d; font-size: .72rem; font-weight: 700; }
 	.admin-audio-upload input[type="file"] { width: min(18rem, 100%); min-height: 2.2rem; padding: .3rem; border: 1px solid #d6e0e4; border-radius: .55rem; color: #718089; background: #fff; font-size: .7rem; }
 	.admin-audio-upload small { flex: 1 0 100%; color: #97a5aa; font-size: .64rem; }
-	.admin-module-source-label { display: grid; gap: .5rem; color: #596970; font-size: .75rem; font-weight: 700; }
-	.admin-module-source { min-height: 34rem; width: 100%; padding: 1.15rem; border: 1px solid #dce7eb; border-radius: .8rem; background: #fbfdfe; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .82rem; line-height: 1.75; }
 	.admin-module-tip { display: flex; gap: .55rem; margin-top: .8rem; padding: .7rem .8rem; border: 1px dashed #c2cfdd; border-radius: .6rem; color: #5f7285; background: #f6f9fc; font-size: .68rem; line-height: 1.6; }
 	.admin-module-tip strong { flex: 0 0 auto; color: #1a4676; }
+	.admin-module-topbar { grid-template-columns: 1fr auto; }
+	.admin-module-form { display: grid; gap: 1.1rem; }
+	.admin-record-card { display: grid; gap: .95rem; padding: 1.1rem 1.2rem; border: 1px solid #e3eaee; border-radius: .9rem; background: #fbfdfe; }
+	.admin-record-head { display: flex; align-items: center; gap: .6rem; color: #3c4b53; font-size: .78rem; }
+	.admin-record-foot { display: flex; justify-content: flex-end; padding-top: .15rem; }
+	.admin-field-hint { color: #93a0a6; font-size: .62rem; font-weight: 500; line-height: 1.5; }
+	.admin-page .admin-module-textarea { min-height: 6.5rem; padding: .7rem .8rem; border-radius: .65rem; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .8rem; line-height: 1.7; }
+	.admin-module-add { display: flex; justify-content: center; padding: .2rem 0; }
 	.admin-body-input { min-height: 46rem; padding: 1.55rem .1rem; border: 0; border-radius: 0; color: #303a40; background: transparent; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .96rem; line-height: 1.85; }
 	.admin-body-input:focus { border: 0; box-shadow: none; }
 	.admin-body-input::placeholder { color: #aab6bb; }
@@ -879,7 +1055,6 @@ import "@fontsource/roboto/700.css";
 		.admin-editor-form { padding: 1.5rem 1rem 3rem; }
 		.admin-body-input { min-height: 30rem; }
 		.admin-module-editor { padding: 1.5rem 1rem 3rem; }
-		.admin-module-source { min-height: 26rem; }
 		.admin-form-footer { align-items: flex-start; flex-direction: column; }
 		.admin-form-footer > div { width: 100%; }
 		.admin-form-footer button { flex: 1; }
@@ -912,9 +1087,11 @@ import "@fontsource/roboto/700.css";
 	.admin-dark .admin-metadata .admin-form-grid, .admin-markdown-toolbar { border-color: #40505a; background: #2d3941; }
 	.admin-dark .admin-markdown-toolbar button { color: #bbcad0; }
 	.admin-dark .admin-markdown-toolbar button:hover { color: #8fbde8; background: #1c3550; }
-	.admin-dark .admin-module-side-card, .admin-module-source { border-color: #40505a; background: #2d3941; }
+	.admin-dark .admin-module-side-card, .admin-dark .admin-record-card { border-color: #40505a; background: #2d3941; }
 	.admin-dark .admin-module-heading p, .admin-module-sidebar-copy { color: #aab8bd; }
 	.admin-dark .admin-module-tip { border-color: #3f4d5e; background: #2a3441; }
+	.admin-dark .admin-record-head { color: #bbcad0; }
+	.admin-dark .admin-field-hint { color: #8b9aa1; }
 	.admin-dark .admin-audio-upload { border-color: #40505a; background: #2d3941; }
 		.admin-dark .admin-audio-upload input[type="file"] { border-color: #4c5c65; color: #bbcad0; background: #26323a; }
 	.admin-dark .admin-emoji-menu { border-color: #4c5c65; background: #2d3941; }

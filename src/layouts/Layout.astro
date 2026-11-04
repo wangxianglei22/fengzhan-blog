@@ -5,6 +5,7 @@ import "@fontsource/roboto/700.css";
 
 import ConfigCarrier from "@components/ConfigCarrier.astro";
 import BackgroundEffects from "@components/BackgroundEffects.astro";
+import GlobalMusicBar from "@components/GlobalMusicBar.astro";
 import { profileConfig, siteConfig } from "@/config";
 import {
 	AUTO_MODE,
@@ -181,6 +182,7 @@ const bannerOffset =
 	>
 		<BackgroundEffects />
 		<audio id="blog-global-audio" class="hidden" preload="metadata" aria-hidden="true"></audio>
+		<GlobalMusicBar />
 		<ConfigCarrier></ConfigCarrier>
 		<slot />
 
@@ -459,6 +461,47 @@ const setup = () => {
 	// Swup replaces orphaned head styles during navigation. Twikoo injects its
 	// stylesheet at runtime, so copy it into the incoming document before the
 	// head plugin compares assets. This keeps cached guestbook pages styled.
+	// Swup replaces the whole <head> on navigation. The head plugin removes the
+	// outgoing page's stylesheet links *before* the new content is inserted, so a
+	// page-specific stylesheet that is not cached yet only lands a moment later.
+	// The visible page then sits there unstyled for a second or two.
+	// To avoid that, load the incoming page's stylesheets first (without applying
+	// them), wait until they are ready, and only then let Swup swap the content.
+	window.swup.hooks.before('content:replace', async (visit: { to?: { document?: Document } }) => {
+		const nextHead = visit.to?.document?.head;
+		if (!nextHead) return;
+		const currentHrefs = new Set(
+			Array.from(document.head.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')).map((link) => link.href),
+		);
+		const pending: Promise<void>[] = [];
+		Array.from(nextHead.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')).forEach((link) => {
+			if (!link.href || currentHrefs.has(link.href)) return;
+			const clone = link.cloneNode(true) as HTMLLinkElement;
+			// Download without applying, so the outgoing page keeps its own look.
+			clone.setAttribute('media', 'not all');
+			pending.push(
+				new Promise<void>((resolve) => {
+					const finish = () => {
+						// Now that the file is loaded, let it apply. Restoring the original
+						// attributes keeps the markup identical to the incoming document,
+						// so the head plugin will not add a second copy of the link.
+						if (link.hasAttribute('media')) {
+							clone.setAttribute('media', link.getAttribute('media') || '');
+						} else {
+							clone.removeAttribute('media');
+						}
+						resolve();
+					};
+					clone.addEventListener('load', finish, { once: true });
+					clone.addEventListener('error', finish, { once: true });
+					// Never block the navigation for more than a moment.
+					window.setTimeout(finish, 3000);
+				}),
+			);
+			document.head.appendChild(clone);
+		});
+		await Promise.all(pending);
+	}, { priority: -200 });
 	window.swup.hooks.before('content:replace', (visit: { to?: { document?: Document } }) => {
 		const nextHead = visit.to?.document?.head;
 		if (!nextHead) return;
