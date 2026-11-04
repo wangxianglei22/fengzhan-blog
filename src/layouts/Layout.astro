@@ -20,6 +20,17 @@ import { defaultFavicons } from "../constants/icon";
 import type { Favicon } from "../types/config";
 import { pathsEqual, url } from "../utils/url-utils";
 import "katex/dist/katex.css";
+// 全局样式：此前这些文件没有任何显式引用，是靠 ImageWrapper 里 import.meta.glob("../../**")
+// 的副作用被一起打包的。glob 收窄后必须在这里显式引入，否则 --primary/--page-bg 等
+// CSS 变量与 .card-base 等基础类会全部丢失，页面变成无样式状态。
+import "@/styles/variables.styl";
+import "@/styles/main.css";
+import "@/styles/markdown.css";
+import "@/styles/markdown-extend.styl";
+import "@/styles/transition.css";
+import "@/styles/scrollbar.css";
+import "@/styles/photoswipe.css";
+import "@/styles/expressive-code.css";
 
 interface Props {
 	title?: string;
