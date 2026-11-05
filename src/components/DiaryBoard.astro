@@ -48,9 +48,9 @@ const formatDate = (date: Date) => new Intl.DateTimeFormat("zh-CN", { month: "sh
         <div class="diary-calendar-note"><span><i class="mood-dot"><Icon name="fa6-brands:canadian-maple-leaf" /></i> 有记录的日子会留下心情</span><span>点击日期打开日记</span></div>
     </section>
 
-    <section class="diary-pinned-section" aria-labelledby="diary-pinned-title">
+    {pinnedEntries.length > 0 && <section class="diary-pinned-section" aria-labelledby="diary-pinned-title">
         <div class="diary-section-heading"><div><span>DEAR DIARY</span><h2 id="diary-pinned-title">置顶日记</h2></div><p>把想反复翻看的片段放在这里</p></div>
-        {pinnedEntries.length > 0 ? <div class="diary-pinned-window" data-pinned-window>
+        <div class="diary-pinned-window" data-pinned-window>
             {pinnedEntries.map((entry, index) => <article class:list={["diary-pinned-card", { "is-visible": index < 3, "is-center": index === 1 }]} data-pinned-card={index}>
                 <a class="diary-cover" href={url(`/diary/${entry.slug}/`)} aria-label={`打开日记：${entry.data.title}`}>
                     {entry.data.cover ? <ImageWrapper src={entry.data.cover} basePath="assets/images" alt={entry.data.title} /> : <div class="diary-cover-placeholder"><Icon name="material-symbols:edit-note-rounded" /><span>{entry.data.mood}</span></div>}
@@ -63,9 +63,9 @@ const formatDate = (date: Date) => new Intl.DateTimeFormat("zh-CN", { month: "sh
                     <a class="diary-read-link" href={url(`/diary/${entry.slug}/`)}>查看日记 <Icon name="material-symbols:arrow-forward-rounded" /></a>
                 </div>
             </article>)}
-        </div> : <div class="diary-empty">{sortedEntries.length === 0 ? "还没有日记，等第一篇记录出现吧。" : "还没有置顶日记。"}</div>}
+        </div>
         {pinnedEntries.length > 3 && <div class="diary-pinned-controls"><button type="button" data-pinned-prev aria-label="上一组置顶日记"><Icon name="material-symbols:chevron-left-rounded" /></button><span>左右切换置顶日记</span><button type="button" data-pinned-next aria-label="下一组置顶日记"><Icon name="material-symbols:chevron-right-rounded" /></button></div>}
-    </section>
+    </section>}
 </section>
 
 <script is:inline define:vars={{ diaryData }}>

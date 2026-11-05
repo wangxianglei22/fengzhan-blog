@@ -413,6 +413,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 					<label>Slug<input name="slug" value="${escapeHtml(item.slug)}" placeholder="留空自动生成" ${item.sha ? "readonly" : ""} /></label>
 					<label>${isPost ? "发布日期" : "日记日期"}<input name="date" type="date" value="${escapeHtml(item.date || today())}" required /></label>
 					${isPost ? `<label>分类<input name="category" value="${escapeHtml(item.category)}" placeholder="例如：生活" /></label><label>语言<input name="lang" value="${escapeHtml(item.lang)}" placeholder="zh-CN" /></label><label class="admin-field-wide">摘要<input name="description" value="${escapeHtml(item.description)}" placeholder="文章列表中显示的摘要" /></label><label class="admin-field-wide">封面地址<input name="image" value="${escapeHtml(item.image)}" placeholder="/images/cover.jpg 或 https://…" /></label>` : `<label class="admin-mood-field" data-mood-picker>\u5fc3\u60c5\u8868\u60c5<span class="admin-mood-input"><input name="mood" value="${escapeHtml(item.mood)}" placeholder="\ud83d\ude0a" maxlength="8" /><button type="button" data-format="emoji" aria-label="\u9009\u62e9\u5fc3\u60c5\u8868\u60c5" title="\u9009\u62e9\u5fc3\u60c5\u8868\u60c5">\u263a</button></span><div class="admin-emoji-menu" data-emoji-menu hidden>${moodEmojis.map((emoji) => `<button type="button" data-emoji="${emoji}" aria-label="${emoji}">${emoji}</button>`).join("")}</div></label><label>心情说明<input name="moodLabel" value="${escapeHtml(item.moodLabel)}" placeholder="今天的心情" /></label><label class="admin-field-wide">摘要<input name="excerpt" value="${escapeHtml(item.excerpt)}" placeholder="日记卡片中显示的摘要" /></label><label class="admin-field-wide">封面地址<input name="cover" value="${escapeHtml(item.cover)}" placeholder="/images/diary.jpg 或 https://…" /></label>`}
+					${isPost ? "" : `<label class="admin-checkbox-field admin-field-wide"><input name="pinned" type="checkbox" ${item.pinned ? "checked" : ""} /><span><strong>置顶到日记页顶部</strong><small>置顶后这篇日记会出现在日记页顶部的「置顶日记」区域，那里一次显示 3 张卡片，可左右切换。</small></span></label>`}
 					<label class="admin-field-wide">标签<input name="tags" value="${escapeHtml(item.tags.join(", "))}" placeholder="多个标签用逗号分隔" /></label>
 					<label class="admin-checkbox-field admin-field-wide"><input name="hidden" type="checkbox" ${item.hidden ? "checked" : ""} /><span><strong>隐藏这篇内容</strong><small>隐藏后不会出现在首页、文章总览、分类、标签或 RSS 中，但原链接仍可访问。</small></span></label>
 						</div>
@@ -470,7 +471,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 				body: data.get("body"),
 			};
 			if (this.kind === "posts") Object.assign(payload, { description: data.get("description"), image: data.get("image"), category: data.get("category"), lang: data.get("lang") });
-			else Object.assign(payload, { mood: data.get("mood"), moodLabel: data.get("moodLabel"), excerpt: data.get("excerpt"), cover: data.get("cover"), pinned: false });
+			else Object.assign(payload, { mood: data.get("mood"), moodLabel: data.get("moodLabel"), excerpt: data.get("excerpt"), cover: data.get("cover"), pinned: data.get("pinned") === "on" });
 			this.setBusy(true);
 			const state = this.querySelector<HTMLElement>(".admin-save-state");
 			if (state) state.textContent = "正在提交…";
@@ -1011,7 +1012,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 	}
 	/* 深色模式由 .admin-dark 类驱动（.admin-dark 加在 <html> 上），
 	   头部脚本会根据「后台主题偏好 / 系统偏好」决定是否添加这个类。 */
-	.admin-dark .admin-page { color-scheme: dark; background: radial-gradient(circle at 4% 0%, #31404a 0, #202a31 46%, #172027 100%); }
+	.admin-dark .admin-page { color-scheme: dark; color: #e7edf0; background: radial-gradient(circle at 4% 0%, #31404a 0, #202a31 46%, #172027 100%); }
 	.admin-dark .admin-theme-toggle { color: #aab8bd; border-color: #40505a; }
 	.admin-dark .admin-theme-toggle:hover { color: #8fbde8; background: #1c3550; border-color: #4c5c65; }
 	.admin-dark .admin-workspace, .admin-dark .admin-auth-panel { border-color: #43515a; background: #26323ad9; box-shadow: 0 1rem 3rem #111a1e55; }
@@ -1048,4 +1049,16 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 	.admin-dark .admin-checkbox-field small { color: #aab8bd; }
 	.admin-dark .admin-editor-head, .admin-dark .admin-form-footer { border-color: #40505a; }
 	.admin-dark .admin-page input::placeholder, .admin-dark .admin-page textarea::placeholder { color: #809098; }
+	/* 暗色模式补充：以下次要文字原本只有浅色方案的颜色，在深色底上对比度过低 */
+	.admin-dark .admin-brand small, .admin-dark .admin-eyebrow, .admin-dark .admin-loading,
+	.admin-dark .admin-editor-empty, .admin-dark .admin-sidebar-footer, .admin-dark .admin-upload-status,
+	.admin-dark .admin-upload-hint, .admin-dark .admin-list-item-copy small, .admin-dark .admin-module-side-card small,
+	.admin-dark .admin-metadata summary small { color: #9fb0b8; }
+	.admin-dark .admin-login-form label, .admin-dark .admin-field-wide, .admin-dark .admin-form-grid label,
+	.admin-dark .admin-body-field, .admin-dark .admin-list-heading, .admin-dark .admin-upload-file-label,
+	.admin-dark .admin-list-empty strong { color: #c9d6db; }
+	.admin-dark .admin-admin-link, .admin-dark .admin-back-button { color: #a9bcc4; }
+	.admin-dark .admin-metadata summary small { color: #9fb0b8; }
+	.admin-dark .admin-auth-hint code, .admin-dark .admin-module-tip strong { color: #8fbde8; }
+	.admin-dark .admin-error { color: #f0a3a3; }
 </style>
