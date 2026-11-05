@@ -1,9 +1,10 @@
 /**
- * 后台模块（音乐 / 荣誉墙 / 留言板 / 友链）表单的解析与序列化逻辑。
+ * 后台模块（音乐 / 荣誉墙 / 留言板 / 常用网站）表单的解析与序列化逻辑。
  *
  * 这四个模块的配置文件都是「--- 分隔的 key: value」小文本，
- * 本文件负责把它们和结构化记录（ModuleRecord）互相转换，
- * 供 src/pages/admin/index.astro 的表单式编辑器使用。
+ * 本文件负责把它们和结构化记录（ModuleRecord）互相转换。
+ * 注意：后台模块编辑器现已改为直接编辑配置原文，
+ * 这里保留给需要结构化解析的场合（如接口校验、命令行脚本）。
  * 这里只处理纯数据，HTML 组装交给 admin 页面。
  */
 
@@ -163,7 +164,7 @@ export function createModuleRecord(module: AdminModule): ModuleRecord {
 /**
  * 补齐字段并套用默认值：
  * - 每个字段都保证有键，表单才不会渲染成 undefined；
- * - 友链的分类留空时按「常用」处理。
+ * - 常用网站的分类留空时按「常用」处理。
  */
 export function normalizeModuleRecords(module: AdminModule, records: ModuleRecord[]): ModuleRecord[] {
 	const fields = getModuleFields(module);

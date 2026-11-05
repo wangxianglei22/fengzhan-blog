@@ -85,15 +85,7 @@ import "@fontsource/roboto/700.css";
 </html>
 
 <script>
-	import {
-		createModuleRecord,
-		getModuleFields,
-		normalizeModuleRecords,
-		parseModuleRecords,
-		serializeModuleRecords,
-		validateModuleRecords,
-	} from "../../utils/admin-module-forms";
-	import type { AdminModule, ModuleField, ModuleRecord } from "../../utils/admin-module-forms";
+	import type { AdminModule } from "../../utils/admin-module-forms";
 
 	type CollectionName = "posts" | "diary";
 	type Entry = {
@@ -119,18 +111,6 @@ import "@fontsource/roboto/700.css";
 	};
 
 	const today = () => new Date().toISOString().slice(0, 10);
-	/**
- * 从 /audio/xxx.mp3 里取出文件名（用于删除音频文件）。
- * 只处理单层文件名，不接受目录跳转。
- */
-const audioFileName = (url: string) => {
-	const raw = String(url || "").trim();
-	if (!raw.startsWith("/audio/")) return "";
-	const name = decodeURIComponent(raw.slice("/audio/".length));
-	if (!name || name.includes("/") || name.includes("\\") || name.includes("..")) return "";
-	return name;
-};
-
 const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
 		"&": "&amp;",
 		"<": "&lt;",
@@ -186,20 +166,14 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		private items: Entry[] = [];
 		private current: Entry | null = null;
 		private dataSha = "";
-		/** 模块表单的当前记录（结构化 key: value），保存时序列化回 markdown。 */
-		private moduleRecords: ModuleRecord[] = [];
-		/** 每条记录是否被用户实际编辑过：刚点「添加一条」的空白行不参与必填校验。 */
-		private moduleTouched: boolean[] = [];
-		/** 读取配置时解析到的记录条数，用来区分「本来就是空文件」和「用户删光了」。 */
-		private moduleLoadedCount = 0;
+		/** 模块配置文件的原始文本，直接在文本框里编辑。 */
+		private dataSource = "";
 		/** 模块页顶栏的状态提示文字。 */
 		private moduleState = "配置编辑";
 		/** 模块页的提示 / 错误信息。 */
 		private moduleNotice = "";
 		/** 音频上传区的状态文字。 */
 		private uploadStatus = "";
-		/** 正在编辑的记录下标（-1 表示无；modal 打开时非 -1）。 */
-		private editingRecordIndex = -1;
 		/** 上传音频弹窗是否打开。 */
 		private uploadModalOpen = false;
 		/** 是否正在读取模块配置。 */
@@ -281,7 +255,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 					<button class="admin-rail-button ${!this.module && this.kind === "diary" ? "is-active" : ""}" data-kind="diary" type="button" aria-label="\u65e5\u8bb0" title="\u65e5\u8bb0">${icon("diary")}</button>
 					<button class="admin-rail-button ${this.module === "music" ? "is-active" : ""}" data-module="music" type="button" aria-label="\u97f3\u4e50" title="\u97f3\u4e50">${icon("music")}</button>
 					<button class="admin-rail-button ${this.module === "honors" ? "is-active" : ""}" data-module="honors" type="button" aria-label="\u8363\u8a89\u5899" title="\u8363\u8a89\u5899">${icon("honors")}</button>
-					<button class="admin-rail-button ${this.module === "friends" ? "is-active" : ""}" data-module="friends" type="button" aria-label="\u53cb\u94fe" title="\u53cb\u94fe">${icon("friends")}</button>
+					<button class="admin-rail-button ${this.module === "friends" ? "is-active" : ""}" data-module="friends" type="button" aria-label="\u5e38\u7528\u7f51\u7ad9" title="\u5e38\u7528\u7f51\u7ad9">${icon("friends")}</button>
 					<button class="admin-rail-button ${this.module === "guestbook" ? "is-active" : ""}" data-module="guestbook" type="button" aria-label="\u7559\u8a00\u677f" title="\u7559\u8a00\u677f">${icon("guestbook")}</button>
 					<div class="admin-rail-spacer"></div>
 					<button class="admin-rail-button" data-action="logout" type="button" aria-label="\u9000\u51fa\u767b\u5f55" title="\u9000\u51fa\u767b\u5f55">${icon("logout")}</button>
@@ -312,7 +286,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 			if (!module) return;
 			this.moduleLoading = true;
 			this.dataSha = "";
-			this.moduleRecords = [];
+			this.dataSource = "";
 			this.moduleNotice = "";
 			this.uploadStatus = "";
 			this.moduleState = "正在读取配置…";
@@ -322,82 +296,31 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 				const data = await response.json() as { source?: string; sha?: string; error?: string };
 				if (!response.ok || typeof data.source !== "string") throw new Error(data.error || "配置读取失败。");
 				this.dataSha = data.sha || "";
-				const records = parseModuleRecords(data.source);
-				this.moduleRecords = normalizeModuleRecords(module, records);
-				this.moduleLoadedCount = this.moduleRecords.length;
-				// 解析不到记录时给一条空记录，让表单字段直接可见，用户不用先点「添加一条」。
-				if (!this.moduleRecords.length) {
-					this.moduleRecords = [createModuleRecord(module)];
-				}
-				// 文件里已有的记录算「已填写」；占位的空行不算，避免误报必填错误。
-				this.moduleTouched = this.moduleRecords.map((_, index) => index < this.moduleLoadedCount);
+				this.dataSource = data.source;
 				this.moduleLoading = false;
 				this.moduleState = "配置编辑";
 				this.renderModuleEditor();
 			} catch (error) {
 				this.moduleLoading = false;
-				this.moduleRecords = [createModuleRecord(module)];
-				this.moduleLoadedCount = 0;
-				this.moduleTouched = [false];
+				this.dataSource = "";
 				this.moduleState = "读取失败";
 				this.renderModuleEditor(error instanceof Error ? error.message : "配置读取失败。");
 			}
 		}
 
-		/** 渲染单个字段的输入控件。 */
-		private renderModuleField(field: ModuleField, record: ModuleRecord, index: number) {
-			const value = String(record[field.key] ?? "");
-			const attrs = `data-module-field="${escapeHtml(field.key)}" data-record-index="${index}"`;
-			const placeholder = escapeHtml(field.placeholder || "");
-			let control = "";
-			if (field.kind === "textarea") {
-				control = `<textarea class="admin-module-textarea" ${attrs} placeholder="${placeholder}" rows="3">${escapeHtml(value)}</textarea>`;
-			} else if (field.kind === "date") {
-				control = `<input type="date" ${attrs} value="${escapeHtml(value)}" placeholder="${placeholder}" />`;
-			} else if (field.kind === "url") {
-				// 站内相对路径不是合法 URL，用 text + inputmode 避免浏览器判定输入无效。
-				control = `<input type="text" inputmode="url" ${attrs} value="${escapeHtml(value)}" placeholder="${placeholder}" />`;
-			} else {
-				control = `<input type="text" ${attrs} value="${escapeHtml(value)}" placeholder="${placeholder}" />`;
-			}
-			const hint = field.hint ? `<small class="admin-field-hint">${escapeHtml(field.hint)}</small>` : "";
-			const wide = field.kind === "textarea" ? ` class="admin-field-wide"` : "";
-			return `<label${wide}>${escapeHtml(field.label)}${control}${hint}</label>`;
-		}
-
-		/** 渲染一条记录的小卡片（guestbook 保持单表单，不参与卡片化）。 */
-		private renderModuleRecord(module: AdminModule, fields: ModuleField[], record: ModuleRecord, index: number, isGuestbook: boolean) {
-			if (isGuestbook) {
-				const controls = fields.map((field) => this.renderModuleField(field, record, index)).join("");
-				return `<article class="admin-record-card"><header class="admin-record-head"><strong>留言板配置</strong></header><div class="admin-form-grid">${controls}</div></article>`;
-			}
-			// 卡片标题：music 用歌曲名，honors 用名称，friends 用名称
-			const titleKey = module === "honors" || module === "friends" ? "name" : "title";
-			const title = String(record[titleKey] ?? "").trim() || `第 ${index + 1} 条`;
-			// 副标题：music 显示歌手，friends 显示链接，honors 显示日期
-			let subtitle = "";
-			if (module === "music") subtitle = String(record.artist ?? "").trim() || "未填歌手";
-			else if (module === "friends") subtitle = String(record.url ?? "").trim() || "未填链接";
-			else if (module === "honors") subtitle = String(record.date ?? "").trim() || "未填日期";
-			// 缩略图：friends 用头像，music/honors 用图标
-			const thumb = module === "friends" && String(record.avatar ?? "").trim()
-				? `<img class="admin-record-thumb-img" src="${escapeHtml(String(record.avatar).trim())}" alt="" loading="lazy" referrerpolicy="no-referrer" />`
-				: `<span class="admin-record-thumb-icon">${icon(module)}</span>`;
-			// 删除按钮（合并）：music 有音频文件时一次删掉文件和记录，否则只删记录
-			const audioFile = module === "music" ? audioFileName(String(record.url ?? "")) : "";
-			const deleteLabel = audioFile ? "删除（含音频文件）" : "删除";
-			return `<article class="admin-module-tile" data-record-index="${index}" tabindex="0" role="button" aria-label="编辑${escapeHtml(title)}">
-				<div class="admin-module-tile-thumb">${thumb}</div>
-				<div class="admin-module-tile-copy"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(subtitle)}</small></div>
-				<button class="admin-tile-delete" data-module-action="remove-record" data-record-index="${index}" data-delete-audio="${escapeHtml(audioFile)}" type="button" aria-label="删除${escapeHtml(title)}" title="${escapeHtml(deleteLabel)}">${icon("trash")}</button>
-			</article>`;
+		/** 各模块的配置文本模板，「插入模板」按钮用它快速补一条骨架。 */
+		private moduleTemplate() {
+			const module = this.module;
+			if (module === "music") return "\n---\ntitle: 歌曲名称\nartist: 歌手名称\nurl: /audio/song.mp3\n---\n";
+			if (module === "honors") return "\n---\ndate: 2024-01-01\nname: 荣誉名称\nissuer: 颁发单位\naward: 奖项\n---\n";
+			if (module === "friends") return "\n---\nname: 网站名称\nurl: https://example.com\navatar: /images/avatar.svg\ndescription: 一句话介绍\n---\n";
+			return "title: 留言板\ndescription: 欢迎留言\nenvId: /api/twikoo\n";
 		}
 
 		private renderModuleEditor(error = "") {
 			const editor = this.querySelector<HTMLElement>("[data-editor]");
 			const module = this.module;
 			if (!editor || !module) return;
-			const fields = getModuleFields(module);
 			const isGuestbook = module === "guestbook";
 			const notice = error || this.moduleNotice;
 			const stateText = this.moduleLoading ? "正在读取配置…" : this.moduleState;
@@ -405,53 +328,41 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 				? `<a class="admin-secondary-button admin-admin-link" href="/guestbook/?admin=1" target="_blank" rel="noopener noreferrer">管理现有留言 ↗</a>`
 				: "";
 			const helper = module === "music"
-				? "每首歌曲一张小卡，点卡片编辑歌名与歌手。"
+				? "直接编辑歌单配置原文，每首歌一段 --- 分隔的条目。"
 				: module === "honors"
-					? "每条荣誉一张小卡，点卡片编辑日期、名称与奖项。"
+					? "直接编辑荣誉墙配置原文，每项荣誉一段 --- 分隔的条目。"
 					: module === "friends"
-						? "每个常用网站一张小卡，点卡片编辑名称、链接与头像。"
-						: "留言板只有一条配置，保存后立即生效。";
-			const records = this.moduleRecords;
-			const list = this.moduleLoading
-				? `<div class="admin-list-empty">正在读取配置…</div>`
-				: records.length
-					? records.map((record, index) => this.renderModuleRecord(module, fields, record, index, isGuestbook)).join("")
-					: `<div class="admin-list-empty"><strong>还没有内容</strong><span>点击下方「新增」开始添加。</span></div>`;
-			// music 模块：上传音频和新建记录合并成一个「上传音频」按钮
-			const addButton = isGuestbook
-				? ""
-				: module === "music"
-					? `<div class="admin-module-add">
-						<input type="file" accept="audio/*,.mp3,.m4a,.ogg,.wav,.flac,.aac" data-audio-file hidden />
-						<button class="admin-secondary-button" data-module-action="add-record" type="button">${icon("plus")} 添加歌曲</button>
-						<button class="admin-primary-button" data-module-action="upload" type="button">${icon("upload")} 上传音频</button>
-					</div>`
-					: `<div class="admin-module-add"><button class="admin-secondary-button" data-module-action="add-record" type="button">${icon("plus")} 添加一条</button></div>`;
-			const uploadStatus = module === "music"
-				? `<small class="admin-upload-status" data-upload-status>${escapeHtml(this.uploadStatus || "点击「上传音频」选择文件，上传后自动生成一条歌曲记录")}</small>`
+						? "直接编辑常用网站配置原文，每个网站一段 --- 分隔的条目。"
+						: "直接编辑留言板配置原文，保存后刷新留言板页面即生效。";
+			const uploadButton = module === "music"
+				? `<button class="admin-secondary-button" data-module-action="upload" type="button">${icon("upload")} 上传音频</button>`
+				: "";
+			const uploadStatus = module === "music" && this.uploadStatus
+				? `<small class="admin-upload-status">${escapeHtml(this.uploadStatus)}</small>`
 				: "";
 			const tip = module === "music"
-				? "上传的音频会保存到 public/audio/，同时生成一条歌曲记录，之后可在卡片里修改歌名。"
+				? "上传的音频会保存到 public/audio/，同时自动往下面的配置文本末尾追加一条记录，确认后点保存。"
 				: module === "honors"
 					? "保存后关于页面会自动读取并分页显示，每页最多 5 项。"
 					: module === "friends"
 						? "url 使用 http(s) 地址；avatar 可以是 /images/ 下的本地图片或 https 图片地址。"
-						: "留言板标题与简介显示在留言板页面顶部；服务地址指向 Twikoo 留言服务，用 /api/twikoo 走本站自带的留言后端，也可以填自己的 Twikoo 服务地址。保存后无需重启，刷新留言板页面即生效。";
+						: "title 是留言板标题，description 是顶部那句简介；envId 是 Twikoo 服务地址，填 /api/twikoo 走本站自带的留言后端，也可以换成自己的 Twikoo 地址。保存后无需重启，刷新留言板页面即生效。";
+			const source = this.moduleLoading ? "" : escapeHtml(this.dataSource);
 			editor.innerHTML = `<div class="admin-editor-topbar admin-module-topbar">
 				<span class="admin-save-state" role="status">${escapeHtml(stateText)}</span>
-				<div class="admin-editor-actions">${guestbookAdminLink}<button class="admin-primary-button" data-module-action="save" type="button">保存配置</button></div>
+				<div class="admin-editor-actions">${uploadButton}${guestbookAdminLink}<button class="admin-secondary-button" data-module-action="template" type="button">插入模板</button><button class="admin-primary-button" data-module-action="save" type="button">保存配置</button></div>
 			</div>
 			${notice ? `<p class="admin-notice" data-module-notice>${escapeHtml(notice)}</p>` : `<p class="admin-notice" data-module-notice hidden></p>`}
 			<div class="admin-module-editor">
 				<div class="admin-module-heading"><div class="admin-module-heading-icon">${icon(module)}</div><div><p class="admin-eyebrow">${module.toUpperCase()} SETTINGS</p><h2>${this.moduleTitle()}</h2><p>${helper}</p></div></div>
 				<div class="admin-module-body" data-module-body>
-					${isGuestbook ? `<form id="module-form" class="admin-module-form">${list}</form>` : `<div class="admin-module-tiles">${list}</div>`}
-					${addButton}
+					<label class="admin-module-source-label">配置内容
+						<textarea class="admin-module-source" data-module-source spellcheck="false" placeholder="${this.moduleLoading ? "正在读取配置…" : "在这里编辑配置文件原文"}">${source}</textarea>
+					</label>
 					${uploadStatus}
 				</div>
 				<div class="admin-module-tip"><strong>保存前检查</strong><span>${tip}</span></div>
 			</div>
-			${this.editingRecordIndex >= 0 ? this.renderRecordModal(module, this.editingRecordIndex) : ""}
 			${this.uploadModalOpen ? this.renderUploadModal() : ""}`;
 		}
 
@@ -592,16 +503,10 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 
 		private handleInput(event: Event) {
 			if (!(event.target instanceof Element)) return;
-			const field = event.target.closest<HTMLElement>("[data-module-field]");
-			if (field) {
-				// 表单输入直接写回结构化记录，只改状态文字，不重渲染（避免丢焦点）。
-				const index = Number(field.dataset.recordIndex);
-				const key = field.dataset.moduleField;
-				if (key && Number.isInteger(index) && this.moduleRecords[index]) {
-					this.moduleRecords[index][key] = (field as HTMLInputElement).value;
-					// 用户动过的行才开始参与必填校验。
-					this.moduleTouched[index] = true;
-				}
+			const sourceArea = event.target.closest<HTMLTextAreaElement>("[data-module-source]");
+			if (sourceArea) {
+				// 只改状态文字，不重渲染，避免输入时丢焦点和光标位置。
+				this.dataSource = sourceArea.value;
 				this.moduleState = "未保存";
 				this.moduleNotice = "";
 				const state = this.querySelector<HTMLElement>(".admin-save-state");
@@ -623,23 +528,11 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		private async saveModule() {
 			const module = this.module;
 			if (!module || this.busy) return;
-			// 刚点「添加一条」但还没填的空白行不参与校验，其余行按必填规则检查。
-			const skipIndexes = this.moduleTouched
-				.map((touched, index) => (touched ? -1 : index))
-				.filter((index) => index >= 0);
-			const problems = validateModuleRecords(module, this.moduleRecords, { skipIndexes });
-			if (problems.length) {
+			const area = this.querySelector<HTMLTextAreaElement>("[data-module-source]");
+			const source = area ? area.value : this.dataSource;
+			if (!source.trim()) {
 				this.moduleState = "请修正后重试";
-				this.moduleNotice = problems.join(" ");
-				this.renderModuleEditor();
-				return;
-			}
-			// 没填过的空白行不写进文件。
-			const records = this.moduleRecords.filter((_, index) => this.moduleTouched[index] !== false);
-			const source = serializeModuleRecords(records, module);
-			if (!source.trim() && !this.moduleLoadedCount) {
-				this.moduleState = "请修正后重试";
-				this.moduleNotice = "内容不能为空，请至少填写一条记录。";
+				this.moduleNotice = "内容不能为空。";
 				this.renderModuleEditor();
 				return;
 			}
@@ -693,23 +586,19 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 				const response = await fetch("/api/admin/music", { method: "POST", credentials: "same-origin", body: form });
 				const data = await response.json() as { uploaded?: boolean; url?: string; name?: string; error?: string };
 				if (!response.ok || !data.uploaded || !data.url) throw new Error(data.error || "音频上传失败。");
-				// 上传成功后直接往结构化记录里追加一条，歌手留空等用户补。
+				// 上传成功后往配置文本末尾追加一条记录，歌手留空等用户自己补。
 				const title = file.name.replace(/\.[^.]+$/, "");
-				this.moduleRecords.push({
-					title,
-					artist: "",
-					url: data.url,
-				});
-				// 新上传的这条已经有标题和路径，属于有效内容。
-				this.moduleTouched = [...this.moduleTouched.slice(0, this.moduleRecords.length - 1), true];
-				this.moduleRecords = normalizeModuleRecords(this.module, this.moduleRecords);
+				const area = this.querySelector<HTMLTextAreaElement>("[data-module-source]");
+				if (area) {
+					area.value = `${area.value.trimEnd()}\n---\ntitle: ${title}\nartist: 未知歌手\nurl: ${data.url}\n---\n`.trimStart();
+					this.dataSource = area.value;
+					area.dispatchEvent(new Event("input", { bubbles: true }));
+				}
 				this.moduleState = "未保存";
-				this.uploadStatus = `已上传 ${data.name || file.name}，点保存生效。`;
+				this.uploadStatus = `已上传 ${data.name || file.name}，配置文本已追加一条记录，确认后点保存生效。`;
 				if (input) input.value = "";
 				this.uploadModalOpen = false;
 				this.renderModuleEditor();
-				// 自动打开新记录的编辑弹窗，让用户立刻改歌名/歌手
-				this.openRecordModal(this.moduleRecords.length - 1);
 			} catch (error) {
 				this.uploadStatus = error instanceof Error ? error.message : "音频上传失败。";
 				this.renderModuleEditor();
@@ -731,70 +620,6 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 					<footer class="admin-modal-foot"><button class="admin-secondary-button" data-upload-action="cancel" type="button">取消</button><button class="admin-primary-button" data-upload-action="confirm" type="button">开始上传</button></footer>
 				</div>
 			</div>`;
-		}
-
-		/** 打开某条记录的编辑弹窗。 */
-		private openRecordModal(index: number) {
-			if (!this.module || index < 0 || index >= this.moduleRecords.length) return;
-			this.editingRecordIndex = index;
-			this.renderModuleEditor();
-		}
-
-		/** 关闭编辑弹窗并重渲染列表。 */
-		private closeRecordModal() {
-			this.editingRecordIndex = -1;
-			this.renderModuleEditor();
-		}
-
-		/** 弹窗内的字段值（不直接写回，点「保存」才落进记录）。 */
-		private renderRecordModal(module: AdminModule, index: number) {
-			const record = this.moduleRecords[index];
-			const fields = getModuleFields(module);
-			const controls = fields.map((field) => this.renderModuleField(field, record, index)).join("");
-			return `<div class="admin-modal-backdrop" data-modal-backdrop>
-				<div class="admin-modal" role="dialog" aria-modal="true" aria-label="编辑记录">
-					<header class="admin-modal-head"><strong>编辑记录</strong><button class="admin-icon-button" data-modal-action="close" type="button" aria-label="关闭">✕</button></header>
-					<div class="admin-modal-body"><div class="admin-form-grid">${controls}</div></div>
-					<footer class="admin-modal-foot"><button class="admin-secondary-button" data-modal-action="close" type="button">取消</button><button class="admin-primary-button" data-modal-action="save" type="button">保存</button></footer>
-				</div>
-			</div>`;
-		}
-
-		/** 删除已上传的音频文件（同时把它从歌单记录里去掉）。 */
-		private async deleteAudioFile(fileName: string) {
-			if (!fileName || this.busy) return;
-			if (!confirm(`确定删除音频文件“${fileName}”吗？此操作会提交 GitHub 删除文件。`)) return;
-			this.setBusy(true);
-			this.uploadStatus = "正在删除音频文件…";
-			this.renderModuleEditor();
-			try {
-				const response = await fetch(`/api/admin/music?file=${encodeURIComponent(fileName)}`, {
-					method: "DELETE",
-					credentials: "same-origin",
-				});
-				const data = await response.json() as { deleted?: boolean; error?: string };
-				if (!response.ok) throw new Error(data.error || "音频文件删除失败。");
-				// 文件已经没了，这条记录也就没有意义，直接从列表里去掉。
-				const keptRecords: ModuleRecord[] = [];
-				const keptTouched: boolean[] = [];
-				this.moduleRecords.forEach((record, index) => {
-					if (audioFileName(record.url) === fileName) return;
-					keptRecords.push(record);
-					keptTouched.push(this.moduleTouched[index] !== false);
-				});
-				this.moduleRecords = keptRecords;
-				this.moduleTouched = keptTouched;
-				this.moduleState = "未保存";
-				this.uploadStatus = data.deleted
-					? `已删除音频文件 ${fileName}，并从歌单里移除了这条记录。点保存生效。`
-					: `仓库里没有找到 ${fileName}，已从歌单里移除了这条记录。点保存生效。`;
-				this.renderModuleEditor();
-			} catch (error) {
-				this.uploadStatus = error instanceof Error ? error.message : "音频文件删除失败。";
-				this.renderModuleEditor();
-			} finally {
-				this.setBusy(false);
-			}
 		}
 
 		private insertMarkdown(format: string) {
@@ -846,16 +671,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		private async handleClick(event: Event) {
 			const target = event.target;
 			if (!(target instanceof Element)) return;
-			// 点击 modal 背板（非弹窗本体）关闭弹窗
-			const backdrop = target.closest<HTMLElement>("[data-modal-backdrop]");
-			if (backdrop && target === backdrop) { this.closeRecordModal(); return; }
-			// 点击记录小卡片（排除卡片内的删除按钮）打开编辑弹窗
-			const tile = target.closest<HTMLElement>(".admin-module-tile");
-			if (tile && !target.closest("[data-module-action]")) {
-				const tileIndex = Number((tile as HTMLElement).dataset.recordIndex);
-				if (Number.isInteger(tileIndex)) { this.openRecordModal(tileIndex); return; }
-			}
-			const button = target.closest<HTMLButtonElement>("button[data-action], button[data-kind], button[data-module], button[data-module-action], button[data-modal-action], button[data-upload-action], button[data-format], button[data-emoji]");
+			const button = target.closest<HTMLButtonElement>("button[data-action], button[data-kind], button[data-module], button[data-module-action], button[data-upload-action], button[data-format], button[data-emoji]");
 			if (!button || this.busy) return;
 			if (button.dataset.emoji) {
 				this.chooseEmoji(button.dataset.emoji, button);
@@ -899,46 +715,14 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 					return;
 				}
 			}
-			if (button.dataset.moduleAction === "add-record") {
-				if (!this.module) return;
-				this.moduleRecords.push(createModuleRecord(this.module));
-				// 新加的空白行先不算「已填写」，用户动过它之后才参与校验。
-				this.moduleTouched.push(false);
-				this.moduleState = "未保存";
-				this.moduleNotice = "";
-				this.renderModuleEditor();
-				// 新建后直接打开编辑弹窗
-				this.openRecordModal(this.moduleRecords.length - 1);
+			if (button.dataset.moduleAction === "template") {
+				const area = this.querySelector<HTMLTextAreaElement>("[data-module-source]");
+				if (!area) return;
+				area.value = `${area.value.trimEnd()}\n${this.moduleTemplate()}`.trimStart();
+				this.dataSource = area.value;
+				area.dispatchEvent(new Event("input", { bubbles: true }));
+				area.focus();
 				return;
-			}
-			if (button.dataset.moduleAction === "remove-record") {
-				const index = Number(button.dataset.recordIndex);
-				if (!this.module || !Number.isInteger(index) || index < 0 || index >= this.moduleRecords.length) return;
-				const audioFile = button.dataset.deleteAudio || "";
-				// 合并删除：有音频文件时先删远端文件，再删本地记录；没有就只删记录
-				if (audioFile) {
-					await this.deleteAudioFile(audioFile);
-					return;
-				}
-				this.moduleRecords.splice(index, 1);
-				this.moduleTouched.splice(index, 1);
-				if (this.editingRecordIndex === index) this.editingRecordIndex = -1;
-				this.moduleState = "未保存";
-				this.moduleNotice = "";
-				this.renderModuleEditor();
-				return;
-			}
-			if (button.dataset.modalAction) {
-				if (button.dataset.modalAction === "close") {
-					this.closeRecordModal();
-					return;
-				}
-				if (button.dataset.modalAction === "save") {
-				// 弹窗保存：字段已经通过 handleInput 写回了记录，直接关闭弹窗
-					if (this.editingRecordIndex >= 0) this.moduleTouched[this.editingRecordIndex] = true;
-					this.closeRecordModal();
-					return;
-				}
 			}
 			if (button.dataset.kind) {
 				this.module = null;
@@ -1152,36 +936,15 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 	.admin-module-heading-icon svg { width: 1.45rem; height: 1.45rem; }
 	.admin-module-heading h2 { margin: .2rem 0 .35rem; font-size: 1.55rem; }
 	.admin-module-heading p { margin: 0; color: #84939a; font-size: .75rem; line-height: 1.6; }
-	.admin-audio-upload { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; margin: 0 0 1.1rem; padding: .75rem .85rem; border: 1px dashed #cfe0e8; border-radius: .75rem; background: #f7fbfd; }
-	.admin-audio-upload label { display: flex; align-items: center; gap: .65rem; color: #65757d; font-size: .72rem; font-weight: 700; }
-	.admin-audio-upload input[type="file"] { width: min(18rem, 100%); min-height: 2.2rem; padding: .3rem; border: 1px solid #d6e0e4; border-radius: .55rem; color: #718089; background: #fff; font-size: .7rem; }
-	.admin-audio-upload small { flex: 1 0 100%; color: #97a5aa; font-size: .64rem; }
 	.admin-module-tip { display: flex; gap: .55rem; margin-top: .8rem; padding: .7rem .8rem; border: 1px dashed #c2cfdd; border-radius: .6rem; color: #5f7285; background: #f6f9fc; font-size: .68rem; line-height: 1.6; }
 	.admin-module-tip strong { flex: 0 0 auto; color: #1a4676; }
 	.admin-module-topbar { grid-template-columns: 1fr auto; }
-	.admin-module-form { display: grid; gap: 1.1rem; }
-	.admin-record-card { display: grid; gap: .95rem; padding: 1.1rem 1.2rem; border: 1px solid #e3eaee; border-radius: .9rem; background: #fbfdfe; }
-	.admin-record-head { display: flex; align-items: center; gap: .6rem; color: #3c4b53; font-size: .78rem; }
-	.admin-record-foot { display: flex; justify-content: flex-end; padding-top: .15rem; }
-	.admin-field-hint { color: #93a0a6; font-size: .62rem; font-weight: 500; line-height: 1.5; }
-	.admin-page .admin-module-textarea { min-height: 6.5rem; padding: .7rem .8rem; border-radius: .65rem; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .8rem; line-height: 1.7; }
-	.admin-module-add { display: flex; justify-content: center; gap: .5rem; padding: .2rem 0; }
-	/* 记录小卡片（音乐/荣誉墙/常用网站） */
-	.admin-module-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); gap: .65rem; }
-	.admin-module-tile { position: relative; display: flex; align-items: center; gap: .6rem; min-width: 0; padding: .6rem; border: 1px solid #e3eaee; border-radius: .8rem; background: #fbfdfe; cursor: pointer; transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
-	.admin-module-tile:hover, .admin-module-tile:focus-visible { border-color: #9cc7ec; box-shadow: 0 .35rem .9rem #274b6b14; transform: translateY(-1px); outline: none; }
-	.admin-module-tile-thumb { display: grid; flex: 0 0 auto; place-items: center; width: 2.6rem; height: 2.6rem; overflow: hidden; border-radius: .6rem; color: #4d9bd8; background: #e7f3fd; }
-	.admin-module-tile-thumb svg { width: 1.2rem; height: 1.2rem; }
-	.admin-module-tile-thumb-img { width: 100%; height: 100%; object-fit: cover; }
-	.admin-module-tile-copy { display: grid; min-width: 0; gap: .1rem; }
-	.admin-module-tile-copy strong { overflow: hidden; color: #303a40; font-size: .76rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-	.admin-module-tile-copy small { overflow: hidden; color: #84939a; font-size: .64rem; text-overflow: ellipsis; white-space: nowrap; }
-	.admin-tile-delete { display: grid; flex: 0 0 auto; place-items: center; width: 1.7rem; height: 1.7rem; border: 0; border-radius: .45rem; color: #b24a5a; background: transparent; cursor: pointer; opacity: 0; transition: opacity 160ms ease, background 160ms ease; }
-	.admin-module-tile:hover .admin-tile-delete, .admin-tile-delete:focus-visible { opacity: 1; }
-	.admin-tile-delete:hover { background: #fdecef; }
-	.admin-tile-delete svg { width: .95rem; height: .95rem; }
-	.admin-upload-status { display: block; margin-top: .45rem; color: #84939a; font-size: .64rem; text-align: center; }
-	/* 编辑弹窗 */
+	/* 配置原文编辑器 */
+	.admin-module-source-label { display: grid; gap: .5rem; color: #3c4b53; font-size: .74rem; font-weight: 700; }
+	.admin-module-source { width: 100%; min-height: 34rem; padding: 1.15rem; border: 1px solid #dce7eb; border-radius: .8rem; color: #303a40; background: #fbfdfe; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .82rem; line-height: 1.75; resize: vertical; }
+	.admin-module-source:focus { border-color: #9cc7ec; outline: none; box-shadow: 0 0 0 3px #4d9bd81f; }
+	.admin-upload-status { display: block; margin-top: .6rem; color: #84939a; font-size: .64rem; line-height: 1.6; }
+	/* 上传音频弹窗 */
 	.admin-modal-backdrop { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 1rem; background: #1a273066; backdrop-filter: blur(3px); }
 	.admin-modal { width: min(100%, 26rem); max-height: min(84vh, 40rem); overflow: auto; border: 1px solid #dbe4e8; border-radius: 1rem; background: #ffffff; box-shadow: 0 1.2rem 3rem #14222e3d; }
 	.admin-modal-head { display: flex; align-items: center; justify-content: space-between; padding: .85rem 1.1rem; border-bottom: 1px solid #edf1f3; color: #303a40; font-size: .86rem; }
@@ -1252,17 +1015,14 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 	.admin-dark .admin-metadata .admin-form-grid, .admin-markdown-toolbar { border-color: #40505a; background: #2d3941; }
 	.admin-dark .admin-markdown-toolbar button { color: #bbcad0; }
 	.admin-dark .admin-markdown-toolbar button:hover { color: #8fbde8; background: #1c3550; }
-	.admin-dark .admin-module-side-card, .admin-dark .admin-record-card { border-color: #40505a; background: #2d3941; }
-	.admin-dark .admin-module-tile { border-color: #40505a; background: #2d3941; }
-	.admin-dark .admin-module-tile-copy strong { color: #edf2f3; }
-	.admin-dark .admin-module-tile-thumb { color: #8fbde8; background: #1c3550; }
+	.admin-dark .admin-module-side-card { border-color: #40505a; background: #2d3941; }
+	.admin-dark .admin-module-source-label { color: #bbcad0; }
+	.admin-dark .admin-module-source { border-color: #4c5c65; color: #edf2f3; background: #222c33; }
 	.admin-dark .admin-modal-backdrop { background: #0b1116a6; }
 	.admin-dark .admin-modal { border-color: #43515a; background: #26323a; }
 	.admin-dark .admin-modal-head { border-color: #3e4b53; color: #edf2f3; }
 	.admin-dark .admin-module-heading p, .admin-module-sidebar-copy { color: #aab8bd; }
 	.admin-dark .admin-module-tip { border-color: #3f4d5e; background: #2a3441; }
-	.admin-dark .admin-record-head { color: #bbcad0; }
-	.admin-dark .admin-field-hint { color: #8b9aa1; }
 	.admin-dark .admin-audio-upload { border-color: #40505a; background: #2d3941; }
 		.admin-dark .admin-audio-upload input[type="file"] { border-color: #4c5c65; color: #bbcad0; background: #26323a; }
 	.admin-dark .admin-emoji-menu { border-color: #4c5c65; background: #2d3941; }
