@@ -20,6 +20,7 @@ const configured = Boolean(guestbook.envId.trim());
 		class="twikoo-container"
 		data-env-id={guestbook.envId}
 		data-client-url={url("/vendor/twikoo-2.0.17.min.js")}
+		data-cdn-url="https://cdn.jsdelivr.net/npm/twikoo@2.0.17/dist/twikoo.min.js"
 		aria-live="polite"
 	></div> : <p class="guestbook-error">留言板正在准备中，稍后再来看看。</p>}
 </section>
@@ -83,24 +84,58 @@ const configured = Boolean(guestbook.envId.trim());
 		if (getInitializer()) return Promise.resolve();
 		if (!twikooLoadPromise) {
 			twikooLoadPromise = new Promise<void>((resolve, reject) => {
-				const script = document.createElement("script");
-				script.src = document.querySelector<HTMLElement>("#twikoo")?.dataset.clientUrl ?? "";
-				if (!script.src) {
+				const twikooEl = document.querySelector<HTMLElement>("#twikoo");
+				// 加载源：优先 CDN（jsdelivr 实测比本站 Pages 快一个量级），
+				// 超时或失败时回退到本站 vendor 文件，保证留言板总能加载出来。
+				const sources = [
+					twikooEl?.dataset.cdnUrl ?? "",
+					twikooEl?.dataset.clientUrl ?? "",
+				].filter(Boolean);
+				if (!sources.length) {
 					reject(new Error("Twikoo client URL is missing"));
 					return;
 				}
-				script.async = true;
-			script.onload = () => {
-				document.head.querySelectorAll<HTMLStyleElement>("style:not([data-twikoo-style])").forEach((style) => {
-					if (isTwikooStylesheet(style)) {
-						style.setAttribute("data-twikoo-style", "true");
+				// CDN 主源最多等 8 秒，超时立刻换本地文件，避免干等
+				const CDN_TIMEOUT = 8000;
+				let settled = false;
+				const finish = (fn: () => void) => {
+					if (settled) return;
+					settled = true;
+					document.head.querySelectorAll<HTMLStyleElement>("style:not([data-twikoo-style])").forEach((style) => {
+						if (isTwikooStylesheet(style)) {
+							style.setAttribute("data-twikoo-style", "true");
+						}
+					});
+					preserveTwikooStyles();
+					fn();
+				};
+				const trySource = (index: number) => {
+					if (index >= sources.length) {
+						finish(() => reject(new Error("Twikoo client failed to load")));
+						return;
 					}
-				});
-				preserveTwikooStyles();
-				resolve();
-			};
-				script.onerror = () => reject(new Error("Twikoo client failed to load"));
-				document.head.append(script);
+					const script = document.createElement("script");
+					script.src = sources[index];
+					script.async = true;
+					// 主源（CDN）才有超时；本地兜底不设限，交给 onerror
+					const timer = index === 0 ? window.setTimeout(() => {
+						script.remove();
+						console.warn("[guestbook] Twikoo CDN timeout, fallback to local vendor");
+						trySource(index + 1);
+					}, CDN_TIMEOUT) : 0;
+					script.onload = () => {
+						if (timer) window.clearTimeout(timer);
+						finish(resolve);
+					};
+					script.onerror = () => {
+						if (timer) window.clearTimeout(timer);
+						script.remove();
+						console.warn(`[guestbook] Twikoo source failed: ${sources[index]}`);
+						trySource(index + 1);
+					};
+					document.head.append(script);
+				};
+				trySource(0);
 			});
 		}
 		return twikooLoadPromise;

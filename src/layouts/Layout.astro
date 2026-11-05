@@ -165,6 +165,9 @@ const bannerOffset =
 
 		<slot name="head"></slot>
 
+		<!-- Twikoo 客户端走 jsdelivr CDN，提前预热连接省去 DNS/TLS 时间 -->
+		<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+
 		{cfBeaconToken && (
 			<script
 				is:inline
