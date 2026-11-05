@@ -13,9 +13,7 @@ const { compact = false, tracks = [] } = Astro.props;
 <music-player class:list={[compact ? "music-player-compact" : "music-player-page", "music-player"]} data-mode={compact ? "compact" : "page"} data-tracks={JSON.stringify(tracks)}>
 	{compact ? (
 		<div class="mini-player-shell">
-			<div class="mini-player-disc" aria-hidden="true"><Icon name="material-symbols:music-note-rounded" /></div>
 			<div class="mini-player-info">
-				<span>NOW PLAYING</span>
 				<strong data-current-title>还没有选择歌曲</strong>
 				<small data-current-artist>去音乐页挑选喜欢的音乐</small>
 			</div>
@@ -29,11 +27,6 @@ const { compact = false, tracks = [] } = Astro.props;
 			<button class="mini-player-skip" data-action="next-track" type="button" aria-label="下一首" title="下一首" disabled>
 				<Icon name="material-symbols:skip-next-rounded" />
 			</button>
-			<label class="mini-player-volume" title="调整音量">
-				<Icon name="material-symbols:volume-up-rounded" />
-				<input data-volume type="range" min="0" max="100" step="1" value="100" aria-label="音量" />
-			</label>
-			<input class="mini-player-seek" data-seek type="range" min="0" max="1000" step="1" value="0" aria-label="歌曲进度" disabled />
 		</div>
 	) : (
 		<div class="music-page-shell">
@@ -545,7 +538,7 @@ const { compact = false, tracks = [] } = Astro.props;
 <style>
 	.music-player { display: block; color: var(--deep-text); }
 	.music-player [hidden] { display: none !important; }
-	.mini-player-shell { position: relative; display: grid; grid-template-columns: 2.4rem minmax(0, 1fr) 1.7rem 2.1rem 1.7rem minmax(4.2rem, 5rem); align-items: center; gap: 0.35rem; padding: 0.68rem 0.8rem 1.45rem; border: 1px solid color-mix(in srgb, var(--deep-text) 10%, transparent); border-radius: 0.9rem; background: color-mix(in srgb, var(--card-bg) 78%, transparent); box-shadow: 0 0.45rem 1.3rem color-mix(in srgb, var(--deep-text) 8%, transparent); text-align: left; backdrop-filter: blur(12px); }
+	.mini-player-shell { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 0.4rem; padding: 0.55rem 0.65rem; border: 1px solid color-mix(in srgb, var(--deep-text) 10%, transparent); border-radius: 0.9rem; background: color-mix(in srgb, var(--card-bg) 78%, transparent); box-shadow: 0 0.45rem 1.3rem color-mix(in srgb, var(--deep-text) 8%, transparent); text-align: left; backdrop-filter: blur(12px); }
 	.mini-player-disc, .music-now-disc { display: grid; place-items: center; aspect-ratio: 1; border-radius: 50%; color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--card-bg)); }
 	.mini-player-disc :global(svg) { width: 1.4rem; height: 1.4rem; }
 	.mini-player-info, .music-now-copy { display: grid; min-width: 0; gap: 0.08rem; }

@@ -495,7 +495,10 @@ const setup = () => {
 					clone.addEventListener('load', finish, { once: true });
 					clone.addEventListener('error', finish, { once: true });
 					// Never block the navigation for more than a moment.
-					window.setTimeout(finish, 3000);
+					// 注意：media="not all" 的样式表优先级最低，加载慢时既不触发 load 也不触发 error，
+					// 之前 3000ms 的兜底会让每次切页都卡满 3 秒。降到 800ms：正常情况样式毫秒级加载，
+					// 只有极端网络才可能短暂无样式，绝不值得用 3 秒空白来换。
+					window.setTimeout(finish, 800);
 				}),
 			);
 			document.head.appendChild(clone);

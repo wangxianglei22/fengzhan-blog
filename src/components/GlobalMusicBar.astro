@@ -7,48 +7,85 @@ const tracks = parseMusic(musicSource);
 ---
 
 <!--
-	全局悬浮迷你播放器。
+	全局悬浮音乐小球。
 	这个节点被放在 Layout.astro 的 <body> 里、swup 容器（#page-shell / #toc）之外，
 	所以切换页面时不会被替换，播放状态与控制条都能一直保留。
+	小球首次访问时不显示；用户点过一次播放音乐后永久显示。
+	点击小球展开出曲名与上一首/播放/下一首三个按钮。
 -->
 <div class="global-music-bar" data-global-music-bar>
-	<MusicPlayer compact tracks={tracks} />
+	<button class="music-ball" data-music-ball type="button" aria-label="展开音乐控制" aria-expanded="false" title="音乐">
+		<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l10-2v13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" fill="currentColor"/><circle cx="16" cy="16" r="3" fill="currentColor"/></svg>
+	</button>
+	<div class="global-music-panel" data-music-panel>
+		<MusicPlayer compact tracks={tracks} />
+	</div>
 </div>
 
 <script>
-	// 暂停后延迟淡出的时间（毫秒）
-	const HIDE_DELAY = 3000;
+	// 暂停后自动收起面板的延迟（毫秒）
+	const HIDE_DELAY = 2500;
+	// 是否已经点过播放（小球是否该显示），用 localStorage 跨刷新记住
+	const REVEAL_KEY = "blog-music-revealed";
 
 	class GlobalMusicBarController {
 		private bar: HTMLElement;
+		private ball: HTMLElement | null;
 		private hideTimer: number | null = null;
+		private expanded = false;
 
 		constructor(bar: HTMLElement) {
 			this.bar = bar;
+			this.ball = bar.querySelector<HTMLElement>("[data-music-ball]");
+			this.ball?.addEventListener("click", this.toggleExpanded);
+			// 点击面板外部时收起（面板本身也在这棵树里，点它不触发收起）
+			document.addEventListener("click", this.handleOutsideClick);
 			// <audio id="blog-global-audio"> 同样在 body 里、swup 容器之外，切页不会丢
 			const audio = document.getElementById("blog-global-audio");
 			if (!(audio instanceof HTMLAudioElement)) return;
 			audio.addEventListener("play", this.handlePlay);
 			audio.addEventListener("pause", this.handlePause);
 			audio.addEventListener("ended", this.handlePause);
-			// 刷新页面时如果本来就在播放中，直接显示
-			if (!audio.paused) this.show();
+			// 之前点过播放，或者刷新页面时本来就在播放中 → 小球直接显示
+			let wasRevealed = false;
+			try { wasRevealed = localStorage.getItem(REVEAL_KEY) === "1"; } catch { /* 忽略 */ }
+			if (wasRevealed) this.reveal();
+			if (!audio.paused) {
+				this.reveal();
+				this.bar.classList.add("is-playing");
+				this.expand();
+			}
 		}
 
-		private handlePlay = () => this.show();
+		private toggleExpanded = () => {
+			if (this.expanded) this.collapse();
+			else this.expand();
+		};
+
+		private handleOutsideClick = (event: MouseEvent) => {
+			if (!this.expanded || !this.bar.contains(event.target as Node)) this.collapse();
+		};
+
+		private handlePlay = () => {
+			// 第一次点播放后，小球永久显示
+			this.reveal();
+			this.bar.classList.add("is-playing");
+			this.expand();
+		};
 
 		private handlePause = () => {
+			this.bar.classList.remove("is-playing");
 			this.clearTimer();
 			this.hideTimer = window.setTimeout(() => {
 				this.hideTimer = null;
-				this.hide();
+				this.collapse();
 			}, HIDE_DELAY);
 		};
 
 		/** 切页后重新对齐一次显隐状态 */
 		sync() {
 			const audio = document.getElementById("blog-global-audio");
-			if (audio instanceof HTMLAudioElement && !audio.paused) this.show();
+			if (audio instanceof HTMLAudioElement && !audio.paused) this.expand();
 		}
 
 		private clearTimer() {
@@ -58,15 +95,24 @@ const tracks = parseMusic(musicSource);
 			}
 		}
 
-		show() {
-			this.clearTimer();
-			this.bar.classList.add("is-visible");
-			document.documentElement.classList.add("has-global-music-bar");
+		/** 显示小球本体（播放过一次后永久显示） */
+		reveal() {
+			this.bar.classList.add("is-revealed");
+			try { localStorage.setItem(REVEAL_KEY, "1"); } catch { /* 忽略 */ }
 		}
 
-		hide() {
-			this.bar.classList.remove("is-visible");
-			document.documentElement.classList.remove("has-global-music-bar");
+		expand() {
+			this.clearTimer();
+			this.expanded = true;
+			this.bar.classList.add("is-expanded");
+			this.ball?.setAttribute("aria-expanded", "true");
+		}
+
+		collapse() {
+			this.clearTimer();
+			this.expanded = false;
+			this.bar.classList.remove("is-expanded", "is-playing");
+			this.ball?.setAttribute("aria-expanded", "false");
 		}
 	}
 
@@ -85,54 +131,92 @@ const tracks = parseMusic(musicSource);
 		right: 1rem;
 		bottom: 1rem;
 		z-index: 60;
-		width: min(22rem, calc(100vw - 2rem));
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: 0.55rem;
+	}
+
+	/* 小球本体：初始隐藏，播放过一次后（is-revealed）永久显示 */
+	.music-ball {
+		display: grid;
+		place-items: center;
+		width: 3rem;
+		height: 3rem;
+		border: 0;
+		border-radius: 50%;
+		color: var(--deep-text);
+		background: color-mix(in srgb, var(--card-bg) 88%, transparent);
+		box-shadow: 0 0.45rem 1.2rem color-mix(in srgb, var(--deep-text) 16%, transparent);
+		backdrop-filter: blur(12px);
+		-webkit-backdrop-filter: blur(12px);
+		cursor: pointer;
 		opacity: 0;
 		visibility: hidden;
 		pointer-events: none;
-		transform: translateY(0.6rem);
-		transition: opacity 220ms ease, transform 220ms ease, visibility 0s linear 220ms;
+		transform: scale(0.8);
+		transition: color 180ms ease, background 180ms ease, transform 180ms ease, opacity 200ms ease, visibility 0s linear 200ms;
 	}
-
-	.global-music-bar.is-visible {
+	.global-music-bar.is-revealed .music-ball {
 		opacity: 1;
 		visibility: visible;
 		pointer-events: auto;
-		transform: translateY(0);
-		transition: opacity 220ms ease, transform 220ms ease, visibility 0s;
+		transform: scale(1);
+		transition: color 180ms ease, background 180ms ease, transform 180ms ease, opacity 200ms ease, visibility 0s;
+	}
+	.music-ball:hover { color: white; background: var(--primary); transform: scale(1.06); }
+	.music-ball :global(svg) { width: 1.4rem; height: 1.4rem; }
+	/* 播放中小球脉动 + 主色 */
+	.global-music-bar.is-playing .music-ball {
+		color: white;
+		background: var(--primary);
+		animation: music-ball-pulse 1.8s ease-in-out infinite;
+	}
+	@keyframes music-ball-pulse {
+		0%, 100% { box-shadow: 0 0.45rem 1.2rem color-mix(in srgb, var(--deep-text) 16%, transparent), 0 0 0 0 color-mix(in srgb, var(--primary) 38%, transparent); }
+		50% { box-shadow: 0 0.45rem 1.2rem color-mix(in srgb, var(--deep-text) 16%, transparent), 0 0 0 0.45rem color-mix(in srgb, var(--primary) 0%, transparent); }
 	}
 
-	/* 迷你播放器自带卡片底，这里统一成全局条的圆角卡片风格（选择器权重更高，避免被组件样式盖掉） */
+	/* 展开面板：默认收起 */
+	.global-music-panel {
+		opacity: 0;
+		visibility: hidden;
+		pointer-events: none;
+		transform: translateY(0.4rem) scale(0.96);
+		transition: opacity 180ms ease, transform 180ms ease, visibility 0s linear 180ms;
+	}
+	.global-music-bar.is-expanded .global-music-panel {
+		opacity: 1;
+		visibility: visible;
+		pointer-events: auto;
+		transform: translateY(0) scale(1);
+		transition: opacity 180ms ease, transform 180ms ease, visibility 0s;
+	}
+
+	/* 紧凑面板：一行曲名 + 三个按钮 */
 	:global(html .global-music-bar .mini-player-shell) {
+		width: min(19rem, calc(100vw - 2rem));
+		grid-template-columns: minmax(0, 1fr) auto auto auto;
+		padding: 0.55rem 0.65rem;
 		border-radius: 1rem;
-		background: color-mix(in srgb, var(--card-bg) 82%, transparent);
+		background: color-mix(in srgb, var(--card-bg) 88%, transparent);
 		box-shadow: 0 0.55rem 1.6rem color-mix(in srgb, var(--deep-text) 13%, transparent);
 		backdrop-filter: blur(16px);
 		-webkit-backdrop-filter: blur(16px);
 	}
-
-	/* 悬浮条出现时给页脚留出空间，避免遮住页脚内容 */
-	:global(html.has-global-music-bar .footer) {
-		padding-bottom: 3rem;
-	}
-
-	@media (max-width: 767px) {
-		.global-music-bar {
-			width: calc(100vw - 2rem);
-		}
-
-		:global(html .global-music-bar .mini-player-shell) {
-			background: color-mix(in srgb, var(--card-bg) 94%, transparent);
-		}
-
-		:global(html.has-global-music-bar .footer) {
-			padding-bottom: 5.5rem;
-		}
+	:global(html .global-music-bar .mini-player-info span),
+	:global(html .global-music-bar .mini-player-disc),
+	:global(html .global-music-bar .mini-player-volume),
+	:global(html .global-music-bar .mini-player-seek) {
+		display: none;
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.global-music-bar,
-		.global-music-bar.is-visible {
-			transform: none;
+		.global-music-bar.is-playing .music-ball { animation: none; }
+		.music-ball,
+		.global-music-bar.is-revealed .music-ball,
+		.global-music-panel,
+		.global-music-bar.is-expanded .global-music-panel {
 			transition: none;
 		}
 	}
