@@ -200,6 +200,8 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		private uploadStatus = "";
 		/** 正在编辑的记录下标（-1 表示无；modal 打开时非 -1）。 */
 		private editingRecordIndex = -1;
+		/** 上传音频弹窗是否打开。 */
+		private uploadModalOpen = false;
 		/** 是否正在读取模块配置。 */
 		private moduleLoading = false;
 		private notice = "";
@@ -387,7 +389,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 			return `<article class="admin-module-tile" data-record-index="${index}" tabindex="0" role="button" aria-label="编辑${escapeHtml(title)}">
 				<div class="admin-module-tile-thumb">${thumb}</div>
 				<div class="admin-module-tile-copy"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(subtitle)}</small></div>
-				<button class="admin-tile-delete" data-module-action="remove-record" data-record-index="${index}" data-audio-file="${escapeHtml(audioFile)}" type="button" aria-label="删除${escapeHtml(title)}" title="${escapeHtml(deleteLabel)}">${icon("trash")}</button>
+				<button class="admin-tile-delete" data-module-action="remove-record" data-record-index="${index}" data-delete-audio="${escapeHtml(audioFile)}" type="button" aria-label="删除${escapeHtml(title)}" title="${escapeHtml(deleteLabel)}">${icon("trash")}</button>
 			</article>`;
 		}
 
@@ -426,7 +428,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 					</div>`
 					: `<div class="admin-module-add"><button class="admin-secondary-button" data-module-action="add-record" type="button">${icon("plus")} 添加一条</button></div>`;
 			const uploadStatus = module === "music"
-				? `<small class="admin-upload-status" data-upload-status>${escapeHtml(this.uploadStatus || "上传音频后自动生成一条记录")}</small>`
+				? `<small class="admin-upload-status" data-upload-status>${escapeHtml(this.uploadStatus || "点击「上传音频」选择文件，上传后自动生成一条歌曲记录")}</small>`
 				: "";
 			const tip = module === "music"
 				? "上传的音频会保存到 public/audio/，同时生成一条歌曲记录，之后可在卡片里修改歌名。"
@@ -449,7 +451,8 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 				</div>
 				<div class="admin-module-tip"><strong>保存前检查</strong><span>${tip}</span></div>
 			</div>
-			${this.editingRecordIndex >= 0 ? this.renderRecordModal(module, this.editingRecordIndex) : ""}`;
+			${this.editingRecordIndex >= 0 ? this.renderRecordModal(module, this.editingRecordIndex) : ""}
+			${this.uploadModalOpen ? this.renderUploadModal() : ""}`;
 		}
 
 		private setList(html: string) {
@@ -667,11 +670,11 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 
 		private async uploadAudio() {
 			if (this.module !== "music" || this.busy) return;
-			const input = this.querySelector<HTMLInputElement>("[data-audio-file]");
+			const input = this.querySelector<HTMLInputElement>("input[data-audio-file]");
 			const file = input?.files?.[0];
 			if (!file) {
-				// 没有选文件时，点击按钮先打开文件选择器，选完再继续上传
-				input?.click();
+				this.uploadStatus = "请先选择一个音频文件。";
+				this.renderModuleEditor();
 				return;
 			}
 			// Cloudflare Pages 单文件上限 25 MiB，超出会在构建阶段被拒绝部署。
@@ -703,6 +706,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 				this.moduleState = "未保存";
 				this.uploadStatus = `已上传 ${data.name || file.name}，点保存生效。`;
 				if (input) input.value = "";
+				this.uploadModalOpen = false;
 				this.renderModuleEditor();
 				// 自动打开新记录的编辑弹窗，让用户立刻改歌名/歌手
 				this.openRecordModal(this.moduleRecords.length - 1);
@@ -712,6 +716,21 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 			} finally {
 				this.setBusy(false);
 			}
+		}
+
+		/** 上传音频弹窗：选择文件 → 开始上传。 */
+		private renderUploadModal() {
+			return `<div class="admin-modal-backdrop" data-modal-backdrop>
+				<div class="admin-modal" role="dialog" aria-modal="true" aria-label="上传音频">
+					<header class="admin-modal-head"><strong>上传音频</strong><button class="admin-icon-button" data-upload-action="cancel" type="button" aria-label="关闭">✕</button></header>
+					<div class="admin-modal-body">
+						<label class="admin-upload-file-label">选择音频文件<input type="file" accept="audio/*,.mp3,.m4a,.ogg,.wav,.flac,.aac" data-audio-file /></label>
+						<small class="admin-upload-hint">支持 mp3 / m4a / ogg / wav / flac / aac，单个文件不超过 25 MiB。上传后自动生成一条歌曲记录。</small>
+						<small class="admin-upload-status" data-upload-status>${escapeHtml(this.uploadStatus || "")}</small>
+					</div>
+					<footer class="admin-modal-foot"><button class="admin-secondary-button" data-upload-action="cancel" type="button">取消</button><button class="admin-primary-button" data-upload-action="confirm" type="button">开始上传</button></footer>
+				</div>
+			</div>`;
 		}
 
 		/** 打开某条记录的编辑弹窗。 */
@@ -836,7 +855,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 				const tileIndex = Number((tile as HTMLElement).dataset.recordIndex);
 				if (Number.isInteger(tileIndex)) { this.openRecordModal(tileIndex); return; }
 			}
-			const button = target.closest<HTMLButtonElement>("button[data-action], button[data-kind], button[data-module], button[data-module-action], button[data-format], button[data-emoji]");
+			const button = target.closest<HTMLButtonElement>("button[data-action], button[data-kind], button[data-module], button[data-module-action], button[data-modal-action], button[data-upload-action], button[data-format], button[data-emoji]");
 			if (!button || this.busy) return;
 			if (button.dataset.emoji) {
 				this.chooseEmoji(button.dataset.emoji, button);
@@ -863,8 +882,22 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 				return;
 			}
 			if (button.dataset.moduleAction === "upload") {
-				await this.uploadAudio();
+				// 打开上传弹窗，选好文件后点「开始上传」
+				this.uploadModalOpen = true;
+				this.uploadStatus = "";
+				this.renderModuleEditor();
 				return;
+			}
+			if (button.dataset.uploadAction) {
+				if (button.dataset.uploadAction === "cancel") {
+					this.uploadModalOpen = false;
+					this.renderModuleEditor();
+					return;
+				}
+				if (button.dataset.uploadAction === "confirm") {
+					await this.uploadAudio();
+					return;
+				}
 			}
 			if (button.dataset.moduleAction === "add-record") {
 				if (!this.module) return;
@@ -881,7 +914,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 			if (button.dataset.moduleAction === "remove-record") {
 				const index = Number(button.dataset.recordIndex);
 				if (!this.module || !Number.isInteger(index) || index < 0 || index >= this.moduleRecords.length) return;
-				const audioFile = button.dataset.audioFile || "";
+				const audioFile = button.dataset.deleteAudio || "";
 				// 合并删除：有音频文件时先删远端文件，再删本地记录；没有就只删记录
 				if (audioFile) {
 					await this.deleteAudioFile(audioFile);
@@ -1154,6 +1187,9 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 	.admin-modal-head { display: flex; align-items: center; justify-content: space-between; padding: .85rem 1.1rem; border-bottom: 1px solid #edf1f3; color: #303a40; font-size: .86rem; }
 	.admin-modal-body { padding: 1rem 1.1rem; }
 	.admin-modal-foot { display: flex; justify-content: flex-end; gap: .45rem; padding: .7rem 1.1rem 1rem; }
+	.admin-upload-file-label { display: block; font-size: .74rem; font-weight: 700; color: #3c4b53; }
+	.admin-upload-file-label input[type="file"] { display: block; width: 100%; margin-top: .45rem; padding: .6rem; border: 1px dashed #cfe0e8; border-radius: .6rem; background: #f7fbfd; font-size: .72rem; }
+	.admin-upload-hint { display: block; margin-top: .6rem; color: #84939a; font-size: .64rem; line-height: 1.6; }
 	.admin-body-input { min-height: 46rem; padding: 1.55rem .1rem; border: 0; border-radius: 0; color: #303a40; background: transparent; font-family: ui-sans-serif, system-ui, sans-serif; font-size: .96rem; line-height: 1.85; }
 	.admin-body-input:focus { border: 0; box-shadow: none; }
 	.admin-body-input::placeholder { color: #aab6bb; }
