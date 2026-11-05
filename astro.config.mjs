@@ -170,29 +170,6 @@ export default defineConfig({
 	vite: {
 		build: {
 			rollupOptions: {
-				output: {
-					// 合并零碎的三方小 chunk：本站每次请求都可能随机卡住数秒，
-					// 请求数比总字节更致命，所以宁可多下一个略大的包。
-					manualChunks(id) {
-						if (!id.includes("node_modules")) {
-							return;
-						}
-						if (/@fontsource/.test(id)) {
-							// 字体 CSS 不要合并：合并后每个页面都会看到 500 字重的 @font-face 并去下载它
-							return;
-						}
-						if (/photoswipe/.test(id)) {
-							return "photoswipe";
-						}
-						if (/[\\/]swup[\\/]|@swup/.test(id)) {
-							return "swup";
-						}
-						if (/[\\/]svelte[\\/]/.test(id)) {
-							return "svelte";
-						}
-						return "vendor";
-					},
-				},
 				onwarn(warning, warn) {
 					// temporarily suppress this warning
 					if (

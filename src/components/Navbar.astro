@@ -264,7 +264,11 @@ if (!globalScope[navbarBoundKey]) {
 {import.meta.env.PROD && <script is:inline define:vars={{scriptUrl: url('/pagefind/pagefind.js')}}>
 async function loadPagefind() {
     try {
-        // 不再先用 HEAD 探测：那会让搜索索引变成两次往返，而本站每次请求都可能卡住数秒。
+        const response = await fetch(scriptUrl, { method: 'HEAD' });
+        if (!response.ok) {
+            throw new Error(`Pagefind script not found: ${response.status}`);
+        }
+
         const pagefind = await import(scriptUrl);
 
         await pagefind.options({
@@ -286,31 +290,9 @@ async function loadPagefind() {
     }
 }
 
-// 搜索索引不再随首屏加载：它和首屏渲染无关，却要和 CSS、字体抢同一条链路，
-// 而本站每次请求都可能随机卡住数秒。改成「用户一碰搜索才加载」，另加空闲兜底。
-let pagefindPromise = null;
-
-function ensurePagefind() {
-    if (!pagefindPromise) {
-        pagefindPromise = loadPagefind();
-    }
-    return pagefindPromise;
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadPagefind);
+} else {
+    loadPagefind();
 }
-
-window.__ensurePagefind = ensurePagefind;
-
-const SEARCH_TRIGGERS = '#search-bar, #search-switch, #search-panel, #search-bar-inside';
-
-function hitSearch(event) {
-    const target = event.target;
-    if (target instanceof Element && target.closest(SEARCH_TRIGGERS)) {
-        ensurePagefind();
-    }
-}
-
-document.addEventListener('pointerdown', hitSearch, { capture: true, passive: true });
-document.addEventListener('focusin', hitSearch, { capture: true, passive: true });
-document.addEventListener('keydown', hitSearch, { capture: true, passive: true });
-
-// 不做任何自动预加载：只有用户真的要搜索（点搜索框、按快捷键）时才拉索引。
 </script>}
