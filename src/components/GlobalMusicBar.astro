@@ -53,7 +53,6 @@ const tracks = parseMusic(musicSource);
 			if (!audio.paused) {
 				this.reveal();
 				this.bar.classList.add("is-playing");
-				this.expand();
 			}
 		}
 
@@ -67,10 +66,9 @@ const tracks = parseMusic(musicSource);
 		};
 
 		private handlePlay = () => {
-			// 第一次点播放后，小球永久显示
+			// 第一次点播放后，小球永久显示；展开交给 :hover，所以这里不再 constant 展开
 			this.reveal();
 			this.bar.classList.add("is-playing");
-			this.expand();
 		};
 
 		private handlePause = () => {
@@ -85,7 +83,9 @@ const tracks = parseMusic(musicSource);
 		/** 切页后重新对齐一次显隐状态 */
 		sync() {
 			const audio = document.getElementById("blog-global-audio");
-			if (audio instanceof HTMLAudioElement && !audio.paused) this.expand();
+			if (!(audio instanceof HTMLAudioElement) || audio.paused) return;
+			this.reveal();
+			this.bar.classList.add("is-playing");
 		}
 
 		private clearTimer() {
@@ -132,9 +132,10 @@ const tracks = parseMusic(musicSource);
 		bottom: 1rem;
 		z-index: 60;
 		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: 0.55rem;
+		/* row-reverse：小球始终贴住右下角，胶囊向左长出来，不会顶出视口 */
+		flex-direction: row-reverse;
+		align-items: center;
+		gap: 0.45rem;
 	}
 
 	/* 小球本体：初始隐藏，播放过一次后（is-revealed）永久显示 */
@@ -177,38 +178,49 @@ const tracks = parseMusic(musicSource);
 		50% { box-shadow: 0 0.45rem 1.2rem color-mix(in srgb, var(--deep-text) 16%, transparent), 0 0 0 0.45rem color-mix(in srgb, var(--primary) 0%, transparent); }
 	}
 
-	/* 展开面板：默认收起 */
+	/* 展开胶囊：平时宽度为 0，鼠标移到小球上（或点开）时向左长出来 */
 	.global-music-panel {
+		max-width: 0;
+		min-width: 0;
 		opacity: 0;
-		visibility: hidden;
+		overflow: hidden;
 		pointer-events: none;
-		transform: translateY(0.4rem) scale(0.96);
-		transition: opacity 180ms ease, transform 180ms ease, visibility 0s linear 180ms;
+		transform-origin: right center;
+		transform: scale(0.92);
+		transition: max-width 240ms cubic-bezier(0.22, 1, 0.36, 1), opacity 160ms ease, transform 240ms ease;
 	}
+	.global-music-bar.is-revealed:hover .global-music-panel,
 	.global-music-bar.is-expanded .global-music-panel {
+		max-width: 12rem;
 		opacity: 1;
-		visibility: visible;
 		pointer-events: auto;
-		transform: translateY(0) scale(1);
-		transition: opacity 180ms ease, transform 180ms ease, visibility 0s;
+		transform: scale(1);
 	}
 
-	/* 紧凑面板：一行曲名 + 三个按钮 */
+	/* 胶囊内容：只有上一首 / 播放暂停 / 下一首，不放曲名 */
 	:global(html .global-music-bar .mini-player-shell) {
-		width: min(19rem, calc(100vw - 2rem));
-		grid-template-columns: minmax(0, 1fr) auto auto auto;
-		padding: 0.55rem 0.65rem;
-		border-radius: 1rem;
+		width: auto;
+		grid-template-columns: repeat(3, auto);
+		align-items: center;
+		gap: 0.28rem;
+		padding: 0.34rem 0.38rem;
+		border-radius: 999px;
 		background: color-mix(in srgb, var(--card-bg) 88%, transparent);
 		box-shadow: 0 0.55rem 1.6rem color-mix(in srgb, var(--deep-text) 13%, transparent);
 		backdrop-filter: blur(16px);
 		-webkit-backdrop-filter: blur(16px);
 	}
-	:global(html .global-music-bar .mini-player-info span),
+	:global(html .global-music-bar .mini-player-info),
 	:global(html .global-music-bar .mini-player-disc),
 	:global(html .global-music-bar .mini-player-volume),
 	:global(html .global-music-bar .mini-player-seek) {
 		display: none;
+	}
+	:global(html .global-music-bar .mini-player-control),
+	:global(html .global-music-bar .mini-player-skip) {
+		width: 2rem;
+		height: 2rem;
+		aspect-ratio: auto;
 	}
 
 	@media (prefers-reduced-motion: reduce) {

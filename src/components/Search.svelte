@@ -138,6 +138,16 @@ onMount(() => {
 			}
 		}, 2000); // Adjust timeout as needed
 	}
+
+	// 小屏点开搜索面板后把窗口拉大时，桌面端内嵌的搜索框会隐藏（lg:hidden），
+	// 面板就只剩一个空的白色容器（残留）。所以跨过 lg 断点时直接收起面板。
+	const closePanelOnDesktop = () => {
+		if (window.innerWidth >= 1024) {
+			document.getElementById("search-panel")?.classList.add("float-panel-closed");
+		}
+	};
+	window.addEventListener("resize", closePanelOnDesktop);
+	return () => window.removeEventListener("resize", closePanelOnDesktop);
 });
 
 $: if (initialized && keywordDesktop) {
@@ -172,8 +182,8 @@ $: if (initialized && keywordMobile) {
 </button>
 
 <!-- search panel -->
-<div id="search-panel" class="float-panel float-panel-closed search-panel absolute w-[min(30rem,calc(100vw-2rem))] md:w-[30rem]
-top-[4.6rem] right-4 md:right-auto md:left-[unset] shadow-2xl rounded-2xl p-2">
+<div id="search-panel" class="float-panel float-panel-closed search-panel absolute w-[min(30rem,calc(100vw-2rem))] lg:w-[30rem]
+top-[4.6rem] right-4 max-w-[calc(100vw-2rem)] shadow-2xl rounded-2xl p-2">
 
     <!-- search bar inside panel for phone/tablet -->
     <div id="search-bar-inside" class="flex relative lg:hidden transition-all items-center h-12 rounded-full

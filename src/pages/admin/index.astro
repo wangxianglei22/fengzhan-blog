@@ -647,8 +647,18 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		}
 
 		private toggleEmojiMenu(button: HTMLButtonElement) {
-			const menu = button.parentElement?.querySelector<HTMLElement>("[data-emoji-menu]");
-			if (menu) menu.hidden = !menu.hidden;
+			// 心情选择器的触发按钮在 .admin-mood-input 里、菜单是它的兄弟节点，
+			// 只查 parentElement 永远找不到菜单（心情表情打不开的根因），
+			// 所以先向上找到最近的容器（心情选择器 / 工具栏表情包装）再找菜单。
+			const scope = button.closest("[data-mood-picker], .admin-emoji-wrap") ?? button.parentElement;
+			const menu = scope?.querySelector<HTMLElement>("[data-emoji-menu]");
+			if (!menu) return;
+			const willOpen = menu.hidden;
+			// 同一时间只保留一个表情菜单打开
+			this.querySelectorAll<HTMLElement>("[data-emoji-menu]").forEach((other) => {
+				other.hidden = true;
+			});
+			menu.hidden = !willOpen;
 		}
 
 		private chooseEmoji(value: string, button?: HTMLButtonElement) {
@@ -665,7 +675,9 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 			area.setRangeText(value, area.selectionStart, area.selectionEnd, "end");
 			area.focus();
 			area.dispatchEvent(new Event("input", { bubbles: true }));
-			this.querySelector<HTMLElement>("[data-emoji-menu]")?.setAttribute("hidden", "true");
+			// 收起的是「被点的那一组」菜单，不能一刀切收第一个（会把另一个菜单留着）
+			const scope = button?.closest("[data-mood-picker], .admin-emoji-wrap") ?? this;
+			scope.querySelector<HTMLElement>("[data-emoji-menu]")?.setAttribute("hidden", "true");
 		}
 
 		private async handleClick(event: Event) {
@@ -1002,17 +1014,17 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 	.admin-dark .admin-page { color-scheme: dark; background: radial-gradient(circle at 4% 0%, #31404a 0, #202a31 46%, #172027 100%); }
 	.admin-dark .admin-theme-toggle { color: #aab8bd; border-color: #40505a; }
 	.admin-dark .admin-theme-toggle:hover { color: #8fbde8; background: #1c3550; border-color: #4c5c65; }
-	.admin-dark .admin-workspace, .admin-auth-panel { border-color: #43515a; background: #26323ad9; box-shadow: 0 1rem 3rem #111a1e55; }
+	.admin-dark .admin-workspace, .admin-dark .admin-auth-panel { border-color: #43515a; background: #26323ad9; box-shadow: 0 1rem 3rem #111a1e55; }
 	.admin-dark .admin-rail { border-color: #3e4b53; background: #202a31; }
 	.admin-dark .admin-rail-button { color: #8fa0a8; }
-	.admin-dark .admin-rail-button:hover, .admin-rail-button.is-active { color: #8fbde8; background: #1c3550; }
+	.admin-dark .admin-rail-button:hover, .admin-dark .admin-rail-button.is-active { color: #8fbde8; background: #1c3550; }
 	.admin-dark .admin-sidebar { border-color: #3e4b53; background: #202a31; }
-	.admin-dark .admin-editor, .admin-editor-topbar { border-color: #40505a; background: #26323a; }
-	.admin-dark .admin-title-input, .admin-body-input { color: #edf2f3; }
-	.admin-dark .admin-title-input::placeholder, .admin-body-input::placeholder { color: #829198; }
+	.admin-dark .admin-editor, .admin-dark .admin-editor-topbar { border-color: #40505a; background: #26323a; }
+	.admin-dark .admin-title-input, .admin-dark .admin-body-input { color: #edf2f3; }
+	.admin-dark .admin-title-input::placeholder, .admin-dark .admin-body-input::placeholder { color: #829198; }
 	.admin-dark .admin-metadata { border-color: #40505a; }
 	.admin-dark .admin-metadata summary { color: #bbcad0; }
-	.admin-dark .admin-metadata .admin-form-grid, .admin-markdown-toolbar { border-color: #40505a; background: #2d3941; }
+	.admin-dark .admin-metadata .admin-form-grid, .admin-dark .admin-markdown-toolbar { border-color: #40505a; background: #2d3941; }
 	.admin-dark .admin-markdown-toolbar button { color: #bbcad0; }
 	.admin-dark .admin-markdown-toolbar button:hover { color: #8fbde8; background: #1c3550; }
 	.admin-dark .admin-module-side-card { border-color: #40505a; background: #2d3941; }
@@ -1021,19 +1033,19 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 	.admin-dark .admin-modal-backdrop { background: #0b1116a6; }
 	.admin-dark .admin-modal { border-color: #43515a; background: #26323a; }
 	.admin-dark .admin-modal-head { border-color: #3e4b53; color: #edf2f3; }
-	.admin-dark .admin-module-heading p, .admin-module-sidebar-copy { color: #aab8bd; }
+	.admin-dark .admin-module-heading p, .admin-dark .admin-module-sidebar-copy { color: #aab8bd; }
 	.admin-dark .admin-module-tip { border-color: #3f4d5e; background: #2a3441; }
 	.admin-dark .admin-audio-upload { border-color: #40505a; background: #2d3941; }
-		.admin-dark .admin-audio-upload input[type="file"] { border-color: #4c5c65; color: #bbcad0; background: #26323a; }
+	.admin-dark .admin-audio-upload input[type="file"] { border-color: #4c5c65; color: #bbcad0; background: #26323a; }
 	.admin-dark .admin-emoji-menu { border-color: #4c5c65; background: #2d3941; }
 	.admin-dark .admin-mood-input button { border-color: #4c5c65; background: #2a3441; }
-	.admin-dark .admin-auth-panel h1, .admin-editor h2, .admin-side-intro h1, .admin-list-item-copy strong { color: #edf2f3; }
-	.admin-dark .admin-muted, .admin-side-intro p, .admin-auth-hint, .admin-form-footer, .admin-list-empty { color: #aab8bd; }
+	.admin-dark .admin-auth-panel h1, .admin-dark .admin-editor h2, .admin-dark .admin-side-intro h1, .admin-dark .admin-list-item-copy strong { color: #edf2f3; }
+	.admin-dark .admin-muted, .admin-dark .admin-side-intro p, .admin-dark .admin-auth-hint, .admin-dark .admin-form-footer, .admin-dark .admin-list-empty { color: #aab8bd; }
 	.admin-dark .admin-tabs { background: #182229; }
-	.admin-dark .admin-tab.is-active, .admin-list-item:hover, .admin-list-item.is-selected, .admin-secondary-button, .admin-page input, .admin-page textarea { border-color: #4c5c65; background: #2d3941; color: #edf2f3; }
+	.admin-dark .admin-tab.is-active, .admin-dark .admin-list-item:hover, .admin-dark .admin-list-item.is-selected, .admin-dark .admin-secondary-button, .admin-dark .admin-page input, .admin-dark .admin-page textarea { border-color: #4c5c65; background: #2d3941; color: #edf2f3; }
 	.admin-dark .admin-checkbox-field { border-color: #3f4d5e; background: #2a3441; }
 	.admin-dark .admin-checkbox-field strong { color: #edf2f3; }
 	.admin-dark .admin-checkbox-field small { color: #aab8bd; }
-	.admin-dark .admin-editor-head, .admin-form-footer { border-color: #40505a; }
-	.admin-dark .admin-page input::placeholder, .admin-page textarea::placeholder { color: #809098; }
+	.admin-dark .admin-editor-head, .admin-dark .admin-form-footer { border-color: #40505a; }
+	.admin-dark .admin-page input::placeholder, .admin-dark .admin-page textarea::placeholder { color: #809098; }
 </style>
