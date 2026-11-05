@@ -70,6 +70,8 @@ const search = async (keyword: string, isDesktop: boolean): Promise<void> => {
 		return;
 	}
 	if (!initialized) {
+		// pagefind 现在是按需加载：先把它拉起来，索引就绪后 pagefindready 会自动重跑这次搜索。
+		(window as Window & { __ensurePagefind?: () => void }).__ensurePagefind?.();
 		return;
 	}
 
