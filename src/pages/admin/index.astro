@@ -1645,6 +1645,8 @@ const iconPaths: Record<string, string> = {
 	.admin-preview-empty { color: #94a4ac; font-size: 0.86rem; }
 	@media (min-width: 1280px) {
 		.admin-writing-split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+		/* 预览收起后编辑区铺满整行，别留半边空白 */
+		.admin-writing-split:has(> .admin-preview.is-collapsed) { grid-template-columns: minmax(0, 1fr); }
 		.admin-preview { display: block; position: sticky; top: 1rem; align-self: start; max-height: calc(100vh - 2rem); overflow-y: auto; }
 	}
 	.admin-image-toast { position: fixed; left: 50%; bottom: 1.6rem; z-index: 95; padding: 0.6rem 0.95rem; border-radius: 0.6rem; color: #fff; background: #2f7fbc; box-shadow: 0 0.5rem 1.5rem #0b223026; font-size: 0.82rem; transform: translateX(-50%); }
