@@ -185,6 +185,9 @@ const iconPaths: Record<string, string> = {
 		private kind: CollectionName = "posts";
 		/** 素材库是独立视图，不参与文章/日记的 kind 切换。 */
 		private mediaView = false;
+		/** 新建一条时的临时草稿：确认后才进列表，避免误点留下空白卡。 */
+		private recordDraft: ModuleRecord | null = null;
+		private mediaUploading = "";
 		private mediaImages: MediaItem[] = [];
 		private mediaAudio: MediaItem[] = [];
 		private mediaLoading = false;
@@ -228,6 +231,7 @@ const iconPaths: Record<string, string> = {
 			this.addEventListener("paste", this.handlePaste);
 			this.addEventListener("dragover", this.handleDragOver);
 			this.addEventListener("drop", this.handleDrop);
+			this.addEventListener("change", this.handleChange);
 			void this.checkSession();
 		}
 
@@ -362,7 +366,7 @@ const iconPaths: Record<string, string> = {
 			</div>`).join("");
 			editor.innerHTML = `<div class="admin-editor-topbar">
 				<span class="admin-save-state" role="status">${escapeHtml(stateText)}</span>
-				<div class="admin-editor-actions"><button class="admin-secondary-button" data-media-refresh type="button">刷新列表</button></div>
+				<div class="admin-editor-actions"><button class="admin-secondary-button" data-media-upload="image" type="button">${icon("upload")} 上传图片</button><button class="admin-secondary-button" data-media-upload="audio" type="button">${icon("upload")} 上传音频</button><button class="admin-secondary-button" data-media-refresh type="button">刷新列表</button><input class="admin-hidden-file" type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif" data-media-input="image" /><input class="admin-hidden-file" type="file" accept="audio/mpeg,audio/mp4,audio/ogg,audio/wav,audio/flac,audio/aac" data-media-input="audio" /></div>
 			</div>
 			${notice}
 			<div class="admin-media">
@@ -559,6 +563,84 @@ const iconPaths: Record<string, string> = {
 			</div>`;
 			if (this.mediaPicker) editor.insertAdjacentHTML("beforeend", this.renderMediaPicker());
 			if (this.uploadModalOpen) editor.insertAdjacentHTML("beforeend", this.renderUploadModal());
+			if (this.recordDraft) editor.insertAdjacentHTML("beforeend", this.renderRecordDraftModal());
+		}
+
+		/** 新建一条的弹窗：填好确认后才会进列表。 */
+		private renderRecordDraftModal() {
+			const module = this.module;
+			const draft = this.recordDraft;
+			if (!module || !draft) return "";
+			const fields = getModuleFields(module).map((field) => this.renderModuleField(field, draft, -1)).join("");
+			return `<div class="admin-modal-backdrop" data-modal-backdrop>
+				<div class="admin-modal admin-modal-wide" role="dialog" aria-modal="true" aria-label="新增一条">
+					<header class="admin-modal-head"><strong>新增一条${this.moduleTitle()}</strong><button class="admin-icon-button" data-module-action="add-record-cancel" type="button" aria-label="关闭">✕</button></header>
+					<div class="admin-modal-body"><div class="admin-form-grid" data-draft-form>${fields}</div></div>
+					<footer class="admin-modal-foot"><button class="admin-secondary-button" data-module-action="add-record-cancel" type="button">取消</button><button class="admin-primary-button" data-module-action="add-record-confirm" type="button">添加这条</button></footer>
+				</div>
+			</div>`;
+		}
+
+		/** 草稿确认：必填校验通过后追加到列表，并滚到新卡片。 */
+		private async commitRecordDraft() {
+			const module = this.module;
+			const draft = this.recordDraft;
+			if (!module || !draft) return;
+			const missing = getModuleFields(module).find((field) => field.required && !String(draft[field.key] ?? "").trim());
+			if (missing) {
+				this.showImageToast(`请先填写「${missing.label}」`, "error");
+				return;
+			}
+			this.moduleRecords.push(draft);
+			this.recordDraft = null;
+			this.moduleState = "未保存";
+			this.moduleNotice = "";
+			this.renderModuleEditor();
+			const cards = this.querySelectorAll<HTMLElement>(".admin-module-cards .admin-record-card");
+			const last = cards[cards.length - 1];
+			if (last) {
+				last.classList.add("is-new");
+				last.scrollIntoView({ block: "center", behavior: "smooth" });
+			}
+		}
+
+		/** 素材库里的文件输入变化 → 直接上传。 */
+		private handleChange(event: Event) {
+			if (!(event.target instanceof HTMLInputElement)) return;
+			const kind = event.target.dataset.mediaInput as "image" | "audio" | undefined;
+			if (!kind) return;
+			const file = event.target.files?.[0] ?? null;
+			event.target.value = "";
+			if (file) void this.uploadMediaFile(kind, file);
+		}
+
+		private async uploadMediaFile(kind: "image" | "audio", file: File) {
+			if (this.mediaUploading) return;
+			const limit = kind === "image" ? 10 * 1024 * 1024 : 25 * 1024 * 1024;
+			if (file.size > limit) {
+				this.mediaNotice = `文件 ${(file.size / 1024 / 1024).toFixed(1)} MiB，超过 ${kind === "image" ? "10" : "25"} MiB 上限，请压缩后再上传。`;
+				this.renderMedia();
+				return;
+			}
+			this.mediaUploading = kind;
+			this.mediaNotice = `正在上传 ${file.name}…`;
+			this.renderMedia();
+			try {
+				const form = new FormData();
+				form.append("file", file);
+				const response = await fetch(kind === "image" ? "/api/admin/images" : "/api/admin/music", { method: "POST", credentials: "same-origin", body: form });
+				const data = (await response.json()) as { uploaded?: boolean; name?: string; url?: string; error?: string };
+				if (!response.ok || !data.uploaded || !data.url) throw new Error(data.error || "上传失败。");
+				await this.loadMedia();
+				// loadMedia 会清空 mediaNotice，所以提示放在它之后写。
+				this.mediaNotice = `已上传 ${data.name || file.name}。新文件要等下次构建完成后才能在页面里访问。`;
+				this.renderMedia();
+			} catch (error) {
+				this.mediaNotice = error instanceof Error ? error.message : "上传失败。";
+				this.renderMedia();
+			} finally {
+				this.mediaUploading = "";
+			}
 		}
 
 		/** 素材库选择弹窗。 */
@@ -604,7 +686,7 @@ const iconPaths: Record<string, string> = {
 		private applyPickedUrl(url: string) {
 			const picker = this.mediaPicker;
 			if (!picker || !url) return;
-			const record = this.moduleRecords[picker.index];
+			const record = picker.index < 0 ? this.recordDraft : this.moduleRecords[picker.index];
 			if (record) {
 				record[picker.key] = url;
 				if (this.module === "music" && picker.key === "url" && !String(record.title || "").trim()) {
@@ -622,8 +704,8 @@ const iconPaths: Record<string, string> = {
 			this.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input[data-record-index][data-record-key], textarea[data-record-index][data-record-key]").forEach((input) => {
 				const index = Number(input.dataset.recordIndex);
 				const key = input.dataset.recordKey || "";
-				const record = this.moduleRecords[index];
-				if (record && key) record[key] = input.value;
+				const record = index < 0 ? this.recordDraft : this.moduleRecords[index];
+				if (record && key && index >= 0) record[key] = input.value;
 			});
 		}
 
@@ -774,7 +856,7 @@ const iconPaths: Record<string, string> = {
 			if (recordInput) {
 				const index = Number(recordInput.dataset.recordIndex);
 				const key = recordInput.dataset.recordKey || "";
-				const record = this.moduleRecords[index];
+				const record = index < 0 ? this.recordDraft : this.moduleRecords[index];
 				if (record && key) {
 					record[key] = recordInput.value;
 					this.moduleState = "未保存";
@@ -1341,6 +1423,7 @@ const iconPaths: Record<string, string> = {
 			}
 			if (button.dataset.module) {
 				this.module = button.dataset.module as AdminModule;
+				this.mediaView = false;
 				this.current = null;
 				this.notice = "";
 				this.renderWorkspace();
@@ -1381,8 +1464,17 @@ const iconPaths: Record<string, string> = {
 			}
 			if (button.dataset.moduleAction === "add-record") {
 				if (!this.module) return;
-				this.moduleRecords.push(createModuleRecord(this.module));
-				this.moduleState = "未保存";
+				this.recordDraft = createModuleRecord(this.module);
+				this.moduleNotice = "";
+				this.renderModuleEditor();
+				return;
+			}
+			if (button.dataset.moduleAction === "add-record-confirm") {
+				await this.commitRecordDraft();
+				return;
+			}
+			if (button.dataset.moduleAction === "add-record-cancel") {
+				this.recordDraft = null;
 				this.moduleNotice = "";
 				this.renderModuleEditor();
 				return;
@@ -1412,6 +1504,11 @@ const iconPaths: Record<string, string> = {
 				const key = button.dataset.recordKey || "";
 				const kind = button.dataset.mediaKind === "audio" ? "audio" : "image";
 				await this.openMediaPicker(kind, index, key);
+				return;
+			}
+			if (button.dataset.mediaUpload) {
+				const input = this.querySelector<HTMLInputElement>(`input[data-media-input="${button.dataset.mediaUpload}"]`);
+				input?.click();
 				return;
 			}
 			if (button.dataset.moduleAction === "pick-url") {
@@ -1576,6 +1673,13 @@ const iconPaths: Record<string, string> = {
 	.admin-rail-button:hover { color: #3a72ac; background: #e9f0f8; transform: translateY(-1px); }
 	.admin-rail-button.is-active { color: #2f6ba8; background: #e2eaf4; box-shadow: inset 0 0 0 1px #c6d6ea; }
 	.admin-rail-spacer { flex: 1; }
+		.admin-hidden-file { display: none; }
+		.admin-modal-foot { display: flex; justify-content: flex-end; gap: .5rem; padding: .9rem 1.1rem 1.1rem; }
+		.admin-record-card.is-new { animation: admin-record-pop 1.1s ease; }
+		@keyframes admin-record-pop {
+			0% { box-shadow: 0 0 0 2px #4d9bd8; }
+			100% { box-shadow: none; }
+		}
 	.admin-sidebar { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; padding: 1.5rem; border-right: 1px solid #e4eaec; background: linear-gradient(180deg, #f9fbfc 0%, #f3f7f8 100%); }
 	.admin-side-intro h1 { font-size: 1.35rem; letter-spacing: -.02em; }
 	.admin-side-intro p { margin: 0; }
