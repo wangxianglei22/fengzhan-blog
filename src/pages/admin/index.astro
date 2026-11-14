@@ -716,6 +716,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 						const start = range ? Math.min(range[0], area.value.length) : area.value.length;
 						const end = range ? Math.min(range[1], area.value.length) : area.value.length;
 						const alt = file.name.replace(/\.[^.]+$/, "");
+						this.uploadedImages.set(url, URL.createObjectURL(file));
 						area.setRangeText(`![${alt}](${url})`, start, end, "end");
 						area.focus();
 						area.dispatchEvent(new Event("input", { bubbles: true }));
@@ -738,6 +739,8 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		}
 
 		private previewTimer = 0;
+	// 刚上传的图片还没随仓库构建上线，先用本地 object URL 让预览立即可见。
+	private uploadedImages = new Map<string, string>();
 
 	private schedulePreview() {
 		window.clearTimeout(this.previewTimer);
@@ -862,7 +865,12 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		}
 		const html = out.join("");
 		if (!html) return '<p class="admin-preview-empty">粘贴或输入正文后，这里会实时显示排版效果，图片也会直接显示出来。</p>';
-		return html.replace(/\u0000(\d+)\u0000/g, (_match, index: string) => stash[Number(index)] ?? "");
+		let restored = html.replace(/\u0000(\d+)\u0000/g, (_match, index: string) => stash[Number(index)] ?? "");
+		// 占位符还原之后再换成本地预览地址，否则图片 URL 还藏在 stash 里替换不到。
+		this.uploadedImages.forEach((blobUrl, remoteUrl) => {
+			restored = restored.split(remoteUrl).join(blobUrl);
+		});
+		return restored;
 	}
 
 	private showImageToast(message: string, tone: "info" | "error") {
@@ -911,6 +919,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 			const alt = (file.name || "粘贴的图片").replace(/\.[^.]+$/, "");
 			const start = Math.min(range[0], target.value.length);
 			const end = Math.min(range[1], target.value.length);
+			this.uploadedImages.set(data.url, URL.createObjectURL(file));
 			target.setRangeText(`![${alt}](${data.url})`, start, end, "end");
 			target.focus();
 			target.dispatchEvent(new Event("input", { bubbles: true }));
