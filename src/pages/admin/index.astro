@@ -176,6 +176,12 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		private uploadStatus = "";
 		/** 上传音频弹窗是否打开。 */
 		private uploadModalOpen = false;
+		/** 图片上传弹窗的用途：插入正文 / 回填文章封面 / 回填日记封面。 */
+		private imageTarget: "body" | "image" | "cover" = "body";
+		/** 图片上传弹窗里的状态文字。 */
+		private imageStatus = "";
+		/** 打开图片弹窗时正文里的选区，用来把图片插回原来的位置。 */
+		private imageInsertRange: [number, number] | null = null;
 		/** 是否正在读取模块配置。 */
 		private moduleLoading = false;
 		private notice = "";
@@ -412,7 +418,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 						<div class="admin-form-grid">
 					<label>Slug<input name="slug" value="${escapeHtml(item.slug)}" placeholder="留空自动生成" ${item.sha ? "readonly" : ""} /></label>
 					<label>${isPost ? "发布日期" : "日记日期"}<input name="date" type="date" value="${escapeHtml(item.date || today())}" required /></label>
-					${isPost ? `<label>分类<input name="category" value="${escapeHtml(item.category)}" placeholder="例如：生活" /></label><label>语言<input name="lang" value="${escapeHtml(item.lang)}" placeholder="zh-CN" /></label><label class="admin-field-wide">摘要<input name="description" value="${escapeHtml(item.description)}" placeholder="文章列表中显示的摘要" /></label><label class="admin-field-wide">封面地址<input name="image" value="${escapeHtml(item.image)}" placeholder="/images/cover.jpg 或 https://…" /></label>` : `<label class="admin-mood-field" data-mood-picker>\u5fc3\u60c5\u8868\u60c5<span class="admin-mood-input"><input name="mood" value="${escapeHtml(item.mood)}" placeholder="\ud83d\ude0a" maxlength="8" /><button type="button" data-format="emoji" aria-label="\u9009\u62e9\u5fc3\u60c5\u8868\u60c5" title="\u9009\u62e9\u5fc3\u60c5\u8868\u60c5">\u263a</button></span><div class="admin-emoji-menu" data-emoji-menu hidden>${moodEmojis.map((emoji) => `<button type="button" data-emoji="${emoji}" aria-label="${emoji}">${emoji}</button>`).join("")}</div></label><label>心情说明<input name="moodLabel" value="${escapeHtml(item.moodLabel)}" placeholder="今天的心情" /></label><label class="admin-field-wide">摘要<input name="excerpt" value="${escapeHtml(item.excerpt)}" placeholder="日记卡片中显示的摘要" /></label><label class="admin-field-wide">封面地址<input name="cover" value="${escapeHtml(item.cover)}" placeholder="/images/diary.jpg 或 https://…" /></label>`}
+					${isPost ? `<label>分类<input name="category" value="${escapeHtml(item.category)}" placeholder="例如：生活" /></label><label>语言<input name="lang" value="${escapeHtml(item.lang)}" placeholder="zh-CN" /></label><label class="admin-field-wide">摘要<input name="description" value="${escapeHtml(item.description)}" placeholder="文章列表中显示的摘要" /></label><label class="admin-field-wide">封面地址<span class="admin-cover-row"><input name="image" value="${escapeHtml(item.image)}" placeholder="/images/cover.jpg 或 https://…" /><button type="button" class="admin-secondary-button" data-image-target="image">上传</button></span></label>` : `<label class="admin-mood-field" data-mood-picker>\u5fc3\u60c5\u8868\u60c5<span class="admin-mood-input"><input name="mood" value="${escapeHtml(item.mood)}" placeholder="\ud83d\ude0a" maxlength="8" /><button type="button" data-format="emoji" aria-label="\u9009\u62e9\u5fc3\u60c5\u8868\u60c5" title="\u9009\u62e9\u5fc3\u60c5\u8868\u60c5">\u263a</button></span><div class="admin-emoji-menu" data-emoji-menu hidden>${moodEmojis.map((emoji) => `<button type="button" data-emoji="${emoji}" aria-label="${emoji}">${emoji}</button>`).join("")}</div></label><label>心情说明<input name="moodLabel" value="${escapeHtml(item.moodLabel)}" placeholder="今天的心情" /></label><label class="admin-field-wide">摘要<input name="excerpt" value="${escapeHtml(item.excerpt)}" placeholder="日记卡片中显示的摘要" /></label><label class="admin-field-wide">封面地址<span class="admin-cover-row"><input name="cover" value="${escapeHtml(item.cover)}" placeholder="/images/diary.jpg 或 https://…" /><button type="button" class="admin-secondary-button" data-image-target="cover">上传</button></span></label>`}
 					${isPost ? "" : `<label class="admin-checkbox-field admin-field-wide"><input name="pinned" type="checkbox" ${item.pinned ? "checked" : ""} /><span><strong>置顶到日记页顶部</strong><small>置顶后这篇日记会出现在日记页顶部的「置顶日记」区域，那里一次显示 3 张卡片，可左右切换。</small></span></label>`}
 					<label class="admin-field-wide">标签<input name="tags" value="${escapeHtml(item.tags.join(", "))}" placeholder="多个标签用逗号分隔" /></label>
 					<label class="admin-checkbox-field admin-field-wide"><input name="hidden" type="checkbox" ${item.hidden ? "checked" : ""} /><span><strong>隐藏这篇内容</strong><small>隐藏后不会出现在首页、文章总览、分类、标签或 RSS 中，但原链接仍可访问。</small></span></label>
@@ -427,7 +433,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 						<button type="button" data-format="list" title="列表" aria-label="列表">☷</button>
 						<button type="button" data-format="link" title="插入链接" aria-label="插入链接">${icon("link")}</button>
 						<button type="button" data-format="code" title="\u4ee3\u7801" aria-label="\u4ee3\u7801">&lt;/&gt;</button>
-						<button type="button" data-format="image" title="\u56fe\u7247" aria-label="\u56fe\u7247">\u25a7</button>
+						<button type="button" data-image-target="body" title="插入本地图片" aria-label="插入本地图片">▧</button>
 						<button type="button" data-format="table" title="\u8868\u683c" aria-label="\u8868\u683c">\u25a6</button>
 						<button type="button" data-format="rule" title="\u5206\u5272\u7ebf" aria-label="\u5206\u5272\u7ebf">\u2014</button>
 						<div class="admin-emoji-wrap"><button type="button" data-format="emoji" title="\u63d2\u5165\u8868\u60c5" aria-label="\u63d2\u5165\u8868\u60c5">\u263a</button><div class="admin-emoji-menu" data-emoji-menu hidden>${moodEmojis.map((emoji) => `<button type="button" data-emoji="${emoji}" aria-label="${emoji}">${emoji}</button>`).join("")}</div></div>
@@ -623,6 +629,105 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 			</div>`;
 		}
 
+		/** 图片上传弹窗：选好文件后上传，正文模式插入 Markdown，封面模式回填地址。 */
+		private renderImageModal() {
+			const titles: Record<string, string> = { body: "插入本地图片", image: "上传封面图片", cover: "上传封面图片" };
+			const title = titles[this.imageTarget] || "上传图片";
+			return `<div class="admin-modal-backdrop" data-image-modal-root>
+				<div class="admin-modal" role="dialog" aria-modal="true" aria-label="${title}">
+					<header class="admin-modal-head"><strong>${title}</strong><button class="admin-icon-button" data-image-action="cancel" type="button" aria-label="关闭">✕</button></header>
+					<div class="admin-modal-body">
+						<label class="admin-upload-file-label">选择图片文件<input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif,.jpg,.jpeg,.png,.gif,.webp,.avif" data-image-file /></label>
+						<small class="admin-upload-hint">支持 jpg / png / gif / webp / avif，单个文件不超过 10 MiB。图片会提交到仓库的 public/images/uploads/，等下次构建完成后才能访问。</small>
+						<small class="admin-upload-status" data-image-status role="status">${escapeHtml(this.imageStatus)}</small>
+					</div>
+					<footer class="admin-modal-foot"><button class="admin-secondary-button" data-image-action="cancel" type="button">取消</button><button class="admin-primary-button" data-image-action="confirm" type="button">开始上传</button></footer>
+				</div>
+			</div>`;
+		}
+
+		/** 打开图片弹窗。弹窗挂在组件外层，避免重渲染把没保存的正文冲掉。 */
+		private openImageModal(target: "body" | "image" | "cover") {
+			if (this.busy) return;
+			this.imageTarget = target;
+			this.imageStatus = "";
+			if (target === "body") {
+				const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
+				this.imageInsertRange = area ? [area.selectionStart, area.selectionEnd] : null;
+			} else {
+				this.imageInsertRange = null;
+			}
+			this.querySelector("[data-image-modal-root]")?.remove();
+			this.insertAdjacentHTML("beforeend", this.renderImageModal());
+			this.querySelector<HTMLInputElement>("input[data-image-file]")?.focus();
+		}
+
+		private closeImageModal() {
+			this.querySelector("[data-image-modal-root]")?.remove();
+			this.imageStatus = "";
+			this.imageInsertRange = null;
+		}
+
+		private setImageStatus(message: string) {
+			this.imageStatus = message;
+			const status = this.querySelector<HTMLElement>("[data-image-status]");
+			if (status) status.textContent = message;
+		}
+
+		private async uploadImage() {
+			if (this.busy) return;
+			const modal = this.querySelector<HTMLElement>("[data-image-modal-root]");
+			if (!modal) return;
+			const input = modal.querySelector<HTMLInputElement>("input[data-image-file]");
+			const file = input?.files?.[0];
+			if (!file) {
+				this.setImageStatus("请先选择一张图片。");
+				return;
+			}
+			const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+			if (file.size > MAX_IMAGE_BYTES) {
+				this.setImageStatus(`图片 ${(file.size / 1024 / 1024).toFixed(1)} MiB，超过 10 MiB 上限。请压缩或转成 WebP 后再上传。`);
+				return;
+			}
+			const target = this.imageTarget;
+			const range = this.imageInsertRange;
+			this.setBusy(true);
+			this.setImageStatus("正在上传…");
+			try {
+				const form = new FormData();
+				form.append("file", file);
+				const response = await fetch("/api/admin/images", { method: "POST", credentials: "same-origin", body: form });
+				const data = await response.json() as { uploaded?: boolean; url?: string; name?: string; error?: string };
+				if (!response.ok || !data.uploaded || !data.url) throw new Error(data.error || "图片上传失败。");
+				const url = data.url;
+				this.closeImageModal();
+				if (target === "body") {
+					const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
+					if (area) {
+						const start = range ? Math.min(range[0], area.value.length) : area.value.length;
+						const end = range ? Math.min(range[1], area.value.length) : area.value.length;
+						const alt = file.name.replace(/\.[^.]+$/, "");
+						area.setRangeText(`![${alt}](${url})`, start, end, "end");
+						area.focus();
+						area.dispatchEvent(new Event("input", { bubbles: true }));
+					}
+				} else {
+					const field = this.querySelector<HTMLInputElement>(target === "cover" ? "input[name='cover']" : "input[name='image']");
+					if (field) {
+						field.value = url;
+						field.dispatchEvent(new Event("input", { bubbles: true }));
+						field.focus();
+					}
+				}
+				const state = this.querySelector<HTMLElement>(".admin-save-state");
+				if (state) state.textContent = "未保存";
+			} catch (error) {
+				this.setImageStatus(error instanceof Error ? error.message : "图片上传失败。");
+			} finally {
+				this.setBusy(false);
+			}
+		}
+
 		private insertMarkdown(format: string) {
 			const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
 			if (!area) return;
@@ -684,10 +789,15 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		private async handleClick(event: Event) {
 			const target = event.target;
 			if (!(target instanceof Element)) return;
-			const button = target.closest<HTMLButtonElement>("button[data-action], button[data-kind], button[data-module], button[data-module-action], button[data-upload-action], button[data-format], button[data-emoji]");
+			const button = target.closest<HTMLButtonElement>("button[data-action], button[data-kind], button[data-module], button[data-module-action], button[data-upload-action], button[data-image-target], button[data-image-action], button[data-format], button[data-emoji]");
 			if (!button || this.busy) return;
 			if (button.dataset.emoji) {
 				this.chooseEmoji(button.dataset.emoji, button);
+				return;
+			}
+			if (button.dataset.imageTarget) {
+				const target = button.dataset.imageTarget;
+				this.openImageModal(target === "image" ? "image" : target === "cover" ? "cover" : "body");
 				return;
 			}
 			if (button.dataset.format) {
@@ -725,6 +835,16 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 				}
 				if (button.dataset.uploadAction === "confirm") {
 					await this.uploadAudio();
+					return;
+				}
+			}
+			if (button.dataset.imageAction) {
+				if (button.dataset.imageAction === "cancel") {
+					this.closeImageModal();
+					return;
+				}
+				if (button.dataset.imageAction === "confirm") {
+					await this.uploadImage();
 					return;
 				}
 			}
@@ -1061,4 +1181,9 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 	.admin-dark .admin-metadata summary small { color: #9fb0b8; }
 	.admin-dark .admin-auth-hint code, .admin-dark .admin-module-tip strong { color: #8fbde8; }
 	.admin-dark .admin-error { color: #f0a3a3; }
+	.admin-cover-row { display: flex; align-items: center; gap: .4rem; }
+	.admin-cover-row input { flex: 1 1 auto; min-width: 0; }
+	.admin-cover-row .admin-secondary-button { flex: 0 0 auto; padding: 0 .7rem; white-space: nowrap; }
+	.admin-dark .admin-cover-row .admin-secondary-button { border-color: #4c5c65; color: #dbe6ea; background: #2c3a42; }
+
 </style>
