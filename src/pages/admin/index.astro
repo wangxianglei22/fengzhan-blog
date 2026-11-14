@@ -193,6 +193,9 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 			this.addEventListener("click", this.handleClick);
 			this.addEventListener("submit", this.handleSubmit);
 			this.addEventListener("input", this.handleInput);
+			this.addEventListener("paste", this.handlePaste);
+			this.addEventListener("dragover", this.handleDragOver);
+			this.addEventListener("drop", this.handleDrop);
 			void this.checkSession();
 		}
 
@@ -434,13 +437,18 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 						<button type="button" data-format="link" title="插入链接" aria-label="插入链接">${icon("link")}</button>
 						<button type="button" data-format="code" title="\u4ee3\u7801" aria-label="\u4ee3\u7801">&lt;/&gt;</button>
 						<button type="button" data-image-target="body" title="插入本地图片" aria-label="插入本地图片">▧</button>
+						<button type="button" data-preview-toggle title="切换实时预览" aria-label="切换实时预览">◧</button>
 						<button type="button" data-format="table" title="\u8868\u683c" aria-label="\u8868\u683c">\u25a6</button>
 						<button type="button" data-format="rule" title="\u5206\u5272\u7ebf" aria-label="\u5206\u5272\u7ebf">\u2014</button>
 						<div class="admin-emoji-wrap"><button type="button" data-format="emoji" title="\u63d2\u5165\u8868\u60c5" aria-label="\u63d2\u5165\u8868\u60c5">\u263a</button><div class="admin-emoji-menu" data-emoji-menu hidden>${moodEmojis.map((emoji) => `<button type="button" data-emoji="${emoji}" aria-label="${emoji}">${emoji}</button>`).join("")}</div></div>
 					</div>
-					<textarea class="admin-body-input" name="body" placeholder="从这里开始写正文，支持 Markdown…" aria-label="正文（Markdown）" spellcheck="false">${escapeHtml(item.body)}</textarea>
+					<div class="admin-writing-split">
+						<textarea class="admin-body-input" name="body" placeholder="从这里开始写正文，支持 Markdown…，也可以直接 Ctrl+V 粘贴图片" aria-label="正文（Markdown）" spellcheck="false">${escapeHtml(item.body)}</textarea>
+						<aside class="admin-preview" data-preview aria-label="正文实时预览"></aside>
+					</div>
 				</div>
 			</form>`;
+			this.updatePreview();
 		}
 
 		private async handleSubmit(event: Event) {
@@ -530,6 +538,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 			if (state) state.textContent = "未保存";
 			const notice = this.querySelector<HTMLElement>(".admin-notice");
 			if (notice) notice.hidden = true;
+			this.schedulePreview();
 		}
 
 		private async saveModule() {
@@ -728,7 +737,227 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 			}
 		}
 
-		private insertMarkdown(format: string) {
+		private previewTimer = 0;
+
+	private schedulePreview() {
+		window.clearTimeout(this.previewTimer);
+		this.previewTimer = window.setTimeout(() => this.updatePreview(), 120);
+	}
+
+	private updatePreview() {
+		const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
+		const target = this.querySelector<HTMLElement>("[data-preview]");
+		if (!area || !target) return;
+		target.innerHTML = this.previewHtml(area.value);
+	}
+
+	// 极简 Markdown → HTML：先转义再还原受支持的语法，只用于后台预览，不参与发布。
+	private previewHtml(source: string): string {
+		const stash: string[] = [];
+		const keep = (html: string): string => `\u0000${stash.push(html) - 1}\u0000`;
+		const inline = (raw: string): string => {
+			let text = escapeHtml(raw);
+			text = text.replace(/`([^`]+)`/g, (_match, code: string) => keep(`<code>${code}</code>`));
+			text = text.replace(
+				/!\[([^\]]*)\]\(([^)\s]+)\)/g,
+				(_match, alt: string, src: string) => keep(`<img src="${src}" alt="${alt}" loading="lazy" />`),
+			);
+			text = text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+			text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+			text = text.replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");
+			return text;
+		};
+		const lines = source.replace(/\r\n?/g, "\n").split("\n");
+		const out: string[] = [];
+		let paragraph: string[] = [];
+		let listType: "ul" | "ol" | null = null;
+		let inCode = false;
+		let codeLang = "";
+		let codeLines: string[] = [];
+		const flushParagraph = () => {
+			if (!paragraph.length) return;
+			out.push(`<p>${inline(paragraph.join(" "))}</p>`);
+			paragraph = [];
+		};
+		const closeList = () => {
+			if (!listType) return;
+			out.push(`</${listType}>`);
+			listType = null;
+		};
+		const openList = (type: "ul" | "ol") => {
+			if (listType === type) return;
+			closeList();
+			out.push(`<${type}>`);
+			listType = type;
+		};
+		for (const line of lines) {
+			const trimmed = line.trim();
+			const fence = /^```(.*)$/.exec(trimmed);
+			if (!inCode && fence) {
+				flushParagraph();
+				closeList();
+				inCode = true;
+				codeLang = fence[1].trim();
+				codeLines = [];
+				continue;
+			}
+			if (inCode) {
+				if (trimmed === "```") {
+					out.push(`<pre><code${codeLang ? ` class="language-${escapeHtml(codeLang)}"` : ""}>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+					inCode = false;
+					codeLines = [];
+					codeLang = "";
+				} else {
+					codeLines.push(line);
+				}
+				continue;
+			}
+			if (!trimmed) {
+				flushParagraph();
+				closeList();
+				continue;
+			}
+			const heading = /^(#{1,4})\s+(.*)$/.exec(trimmed);
+			if (heading) {
+				flushParagraph();
+				closeList();
+				const level = Math.min(heading[1].length, 4);
+				out.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+				continue;
+			}
+			if (/^(-{3,}|\*{3,})$/.test(trimmed)) {
+				flushParagraph();
+				closeList();
+				out.push("<hr />");
+				continue;
+			}
+			const quote = /^>\s?(.*)$/.exec(trimmed);
+			if (quote) {
+				flushParagraph();
+				closeList();
+				out.push(`<blockquote>${inline(quote[1])}</blockquote>`);
+				continue;
+			}
+			const bullet = /^[-*+]\s+(.*)$/.exec(trimmed);
+			if (bullet) {
+				flushParagraph();
+				openList("ul");
+				out.push(`<li>${inline(bullet[1])}</li>`);
+				continue;
+			}
+			const ordered = /^\d+\.\s+(.*)$/.exec(trimmed);
+			if (ordered) {
+				flushParagraph();
+				openList("ol");
+				out.push(`<li>${inline(ordered[1])}</li>`);
+				continue;
+			}
+			closeList();
+			paragraph.push(trimmed);
+		}
+		flushParagraph();
+		closeList();
+		if (inCode && codeLines.length) {
+			out.push(`<pre><code${codeLang ? ` class="language-${escapeHtml(codeLang)}"` : ""}>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+		}
+		const html = out.join("");
+		if (!html) return '<p class="admin-preview-empty">粘贴或输入正文后，这里会实时显示排版效果，图片也会直接显示出来。</p>';
+		return html.replace(/\u0000(\d+)\u0000/g, (_match, index: string) => stash[Number(index)] ?? "");
+	}
+
+	private showImageToast(message: string, tone: "info" | "error") {
+		let toast = this.querySelector<HTMLElement>("[data-image-toast]");
+		if (!toast) {
+			toast = document.createElement("div");
+			toast.className = "admin-image-toast";
+			toast.setAttribute("data-image-toast", "");
+			this.append(toast);
+		}
+		toast.textContent = message;
+		toast.dataset.tone = tone;
+		toast.hidden = false;
+		window.clearTimeout(this.toastTimer);
+		const delay = tone === "error" ? 8000 : 2600;
+		this.toastTimer = window.setTimeout(() => {
+			if (toast) toast.hidden = true;
+		}, delay);
+	}
+
+	private toastTimer = 0;
+
+	// 把粘贴 / 拖入的图片直接上传，成功后按当前光标插入 Markdown。
+	private async uploadInlineImage(file: File) {
+		const allowed = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"];
+		if (!allowed.includes(file.type)) {
+			this.showImageToast("只支持 jpg / png / gif / webp / avif 图片。", "error");
+			return;
+		}
+		if (file.size > 10 * 1024 * 1024) {
+			this.showImageToast(`图片 ${(file.size / 1024 / 1024).toFixed(1)} MiB，超过 10 MiB 上限，请压缩后再粘贴。`, "error");
+			return;
+		}
+		const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
+		const range: [number, number] = area ? [area.selectionStart, area.selectionEnd] : [0, 0];
+		this.showImageToast("正在上传图片…", "info");
+		this.setBusy(true);
+		try {
+			const form = new FormData();
+			form.append("file", file);
+			const response = await fetch("/api/admin/images", { method: "POST", credentials: "same-origin", body: form });
+			const data = await response.json() as { uploaded?: boolean; url?: string; error?: string };
+			if (!response.ok || !data.uploaded || !data.url) throw new Error(data.error || "图片上传失败。");
+			const target = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
+			if (!target) throw new Error("找不到正文输入框。");
+			const alt = (file.name || "粘贴的图片").replace(/\.[^.]+$/, "");
+			const start = Math.min(range[0], target.value.length);
+			const end = Math.min(range[1], target.value.length);
+			target.setRangeText(`![${alt}](${data.url})`, start, end, "end");
+			target.focus();
+			target.dispatchEvent(new Event("input", { bubbles: true }));
+			this.updatePreview();
+			this.showImageToast("图片已插入正文。", "info");
+		} catch (error) {
+			this.showImageToast(error instanceof Error ? error.message : "图片上传失败。", "error");
+		} finally {
+			this.setBusy(false);
+		}
+	}
+
+	private handlePaste = (event: ClipboardEvent) => {
+		const target = event.target;
+		if (!(target instanceof HTMLTextAreaElement) || !target.closest("#editor-form")) return;
+		const items = event.clipboardData?.items;
+		if (!items) return;
+		for (const item of items) {
+			if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
+			const file = item.getAsFile();
+			if (!file) continue;
+			event.preventDefault();
+			void this.uploadInlineImage(file);
+			return;
+		}
+	};
+
+	private handleDragOver = (event: DragEvent) => {
+		const target = event.target;
+		if (!(target instanceof Element) || !target.closest("#editor-form")) return;
+		if (!event.dataTransfer) return;
+		event.preventDefault();
+		event.dataTransfer.dropEffect = "copy";
+	};
+
+	private handleDrop = (event: DragEvent) => {
+		const target = event.target;
+		if (!(target instanceof Element) || !target.closest("#editor-form")) return;
+		const files = event.dataTransfer?.files;
+		if (!files || !files.length) return;
+		const file = Array.from(files).find((candidate) => candidate.type.startsWith("image/"));
+		if (!file) return;
+		event.preventDefault();
+		void this.uploadInlineImage(file);
+	};
+
+	private insertMarkdown(format: string) {
 			const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
 			if (!area) return;
 			const start = area.selectionStart;
@@ -789,10 +1018,15 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		private async handleClick(event: Event) {
 			const target = event.target;
 			if (!(target instanceof Element)) return;
-			const button = target.closest<HTMLButtonElement>("button[data-action], button[data-kind], button[data-module], button[data-module-action], button[data-upload-action], button[data-image-target], button[data-image-action], button[data-format], button[data-emoji]");
+			const button = target.closest<HTMLButtonElement>("button[data-action], button[data-kind], button[data-module], button[data-module-action], button[data-upload-action], button[data-image-target], button[data-image-action], button[data-preview-toggle], button[data-format], button[data-emoji]");
 			if (!button || this.busy) return;
 			if (button.dataset.emoji) {
 				this.chooseEmoji(button.dataset.emoji, button);
+				return;
+			}
+			if (button.dataset.previewToggle !== undefined) {
+				const preview = this.querySelector<HTMLElement>(".admin-preview");
+				preview?.classList.toggle("is-open");
 				return;
 			}
 			if (button.dataset.imageTarget) {
@@ -1036,6 +1270,41 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 	.admin-editor-topbar .admin-primary-button:hover { background: #4c9bd6; }
 	.admin-icon-button { width: 2.35rem; padding: 0; }
 	.admin-icon-button svg { width: 1.1rem; height: 1.1rem; }
+	.admin-writing-split { display: grid; gap: 1.4rem; }
+	.admin-preview { display: none; padding: 1.5rem 1.35rem; border: 1px solid #e6edf1; border-radius: 0.9rem; color: #2f3a41; background: #fbfdfe; font-size: 0.92rem; line-height: 1.85; overflow-wrap: anywhere; }
+	.admin-preview.is-open { display: block; }
+	.admin-preview > :first-child { margin-top: 0; }
+	.admin-preview h1, .admin-preview h2, .admin-preview h3, .admin-preview h4 { margin: 1.35em 0 0.5em; font-weight: 700; line-height: 1.35; }
+	.admin-preview h1 { font-size: 1.34rem; }
+	.admin-preview h2 { font-size: 1.18rem; }
+	.admin-preview h3 { font-size: 1.04rem; }
+	.admin-preview p { margin: 0.8em 0; }
+	.admin-preview img { display: block; max-width: 100%; height: auto; margin: 1em 0; border-radius: 0.6rem; }
+	.admin-preview ul, .admin-preview ol { margin: 0.8em 0; padding-left: 1.4em; }
+	.admin-preview li { margin: 0.25em 0; }
+	.admin-preview blockquote { margin: 0.9em 0; padding: 0.1em 0 0.1em 1em; border-left: 3px solid #cfe0ec; color: #5b6b74; }
+	.admin-preview code { padding: 0.12em 0.35em; border-radius: 0.3rem; background: #eef4f8; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.86em; }
+	.admin-preview pre { margin: 1em 0; padding: 0.9rem 1rem; border-radius: 0.7rem; background: #eef4f8; overflow-x: auto; }
+	.admin-preview pre code { padding: 0; background: transparent; }
+	.admin-preview a { color: #2f7fbc; text-decoration: underline; }
+	.admin-preview hr { margin: 1.4em 0; border: 0; border-top: 1px solid #e2ebf0; }
+	.admin-preview-empty { color: #94a4ac; font-size: 0.86rem; }
+	@media (min-width: 1280px) {
+		.admin-writing-split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+		.admin-preview { display: block; position: sticky; top: 1rem; align-self: start; max-height: calc(100vh - 2rem); overflow-y: auto; }
+	}
+	.admin-image-toast { position: fixed; left: 50%; bottom: 1.6rem; z-index: 95; padding: 0.6rem 0.95rem; border-radius: 0.6rem; color: #fff; background: #2f7fbc; box-shadow: 0 0.5rem 1.5rem #0b223026; font-size: 0.82rem; transform: translateX(-50%); }
+	.admin-image-toast[data-tone="error"] { background: #c0504d; }
+	.admin-image-toast[hidden] { display: none; }
+	.admin-dark .admin-preview { border-color: #40505a; color: #dbe6ea; background: #222c33; }
+	.admin-dark .admin-preview code, .admin-dark .admin-preview pre { background: #2d3941; }
+	.admin-dark .admin-preview blockquote { border-left-color: #4c5c65; color: #a8b8c0; }
+	.admin-dark .admin-preview a { color: #8fbde8; }
+	.admin-dark .admin-preview hr { border-top-color: #3b4a53; }
+	.admin-dark .admin-preview-empty { color: #829198; }
+	.admin-dark .admin-image-toast { background: #2f7fbc; }
+	.admin-dark .admin-image-toast[data-tone="error"] { background: #a8433f; }
+
 	.admin-editor-form { padding: 2.25rem clamp(1.75rem, 4vw, 4.5rem) 4rem; }
 	.admin-writing-surface { width: min(100%, 58rem); margin: 0 auto; }
 	.admin-title-input { width: 100%; min-height: 4.5rem; padding: .2rem 0; border: 0; border-radius: 0; color: #222b32; background: transparent; font-size: clamp(1.7rem, 2.5vw, 2.4rem); font-weight: 800; line-height: 1.35; letter-spacing: -.03em; }
