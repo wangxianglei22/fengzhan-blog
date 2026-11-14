@@ -4,6 +4,7 @@ import {
 	GithubError,
 	handleError,
 	json,
+	repoFileSha,
 	unauthorized,
 	writeBinaryFile,
 	type Context,
@@ -60,14 +61,17 @@ export const onRequestPost = async ({ request, env }: Context) => {
 		const dotIndex = safeName.lastIndexOf(".");
 		const base = dotIndex > 0 ? safeName.slice(0, dotIndex) : safeName;
 		const suffix = dotIndex > 0 ? safeName.slice(dotIndex) : "";
-		// 同名文件不覆盖：GitHub 的 PUT 在文件已存在时会返回 409，这里自动加序号重试。
+		// 同名文件不覆盖：GitHub 对「已存在但没给 sha」的 PUT 返回的是 422（不是 409），
+		// 所以先查一遍是否已存在，存在就自动加序号，绝不覆盖已有图片。
 		for (let attempt = 0; attempt < 20; attempt += 1) {
 			const name = attempt === 0 ? safeName : `${base}-${attempt + 1}${suffix}`;
+			const target = `${uploadDir}/${name}`;
+			if (await repoFileSha(env, target)) continue;
 			try {
-				await writeBinaryFile(env, `${uploadDir}/${name}`, bytes, `上传图片：${name}`);
+				await writeBinaryFile(env, target, bytes, `上传图片：${name}`);
 				return json({ uploaded: true, name, url: `/images/uploads/${name.split("/").map(encodeURIComponent).join("/")}` }, 201, corsHeaders);
 			} catch (error) {
-				if (error instanceof GithubError && error.status === 409) continue;
+				if (error instanceof GithubError && (error.status === 409 || error.status === 422)) continue;
 				throw error;
 			}
 		}

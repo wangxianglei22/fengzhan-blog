@@ -300,9 +300,9 @@ export async function writeDataFile(env: Env, name: DataFileName, source: string
  * 文件不存在时返回 false，不报错。
  */
 export async function deleteRepoFile(env: Env, path: string, message: string) {
-	const existing = await readFile(env, path);
-	if (!existing) return false;
-	await deleteFile(env, path, existing.sha, message);
+	const sha = await repoFileSha(env, path);
+	if (!sha) return false;
+	await deleteFile(env, path, sha, message);
 	return true;
 }
 
@@ -344,6 +344,28 @@ export async function writeBinaryFile(env: Env, path: string, bytes: Uint8Array,
 			...(sha ? { sha } : {}),
 		}),
 	});
+}
+
+/**
+ * 仓库里某个文件当前的 sha；文件不存在时返回 null。
+ * 上传前先查一下，可以避免「同名文件已存在」时 GitHub 直接返回 422。
+ */
+export async function repoFileSha(env: Env, path: string) {
+	const config = getGithubConfig(env);
+	// 这里只要 sha，不能走 readFile：超过 1 MiB 的文件 GitHub 不返回 content，
+	// readFile 会当成读取失败，导致同名大文件（比如 mp3）根本无法判断是否已存在。
+	const response = await fetch(`${githubApi}/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}/contents/${encodePath(path)}?ref=${encodeURIComponent(config.branch)}`, {
+		headers: {
+			accept: "application/vnd.github+json",
+			authorization: `Bearer ${config.token}`,
+			"user-agent": "blog-blog-admin",
+			"x-github-api-version": "2022-11-28",
+		},
+	});
+	if (response.status === 404) return null;
+	if (!response.ok) throw new GithubError(response.status, await response.text());
+	const data = await response.json() as { sha?: string };
+	return data.sha || null;
 }
 
 function slugIsSafe(slug: string) {
@@ -534,7 +556,9 @@ export function handleError(error: unknown) {
 				? "GitHub Token 无效或已过期，请重新生成 Token。"
 				: error.status === 403
 					? `GitHub 拒绝访问：${detail || "请检查 Token 的仓库权限。"}`
-					: "GitHub 仓库操作失败，请检查后台配置。";
+					: error.status === 422
+						? `GitHub 拒绝了这次写入：${detail || "文件内容不合法，或同名文件已存在。"}`
+						: "GitHub 仓库操作失败，请检查后台配置。";
 		return json({ error: message }, error.status, corsHeaders);
 	}
 	const message = error instanceof Error ? error.message : "后台操作失败。";

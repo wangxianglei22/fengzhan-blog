@@ -1254,8 +1254,12 @@ const iconPaths: Record<string, string> = {
 		this.showImageToast("正在上传图片…", "info");
 		this.setBusy(true);
 		try {
+			// 剪贴板里的图片名常常统一叫 image.png，直接传会撞上仓库同名文件，
+			// 这里先给个带时间戳的名字，省掉一次存在性查询。
+			const extension = file.type === "image/jpeg" ? ".jpg" : `.${file.type.split("/")[1] || "png"}`;
+			const stamped = new File([file], `paste-${Date.now()}${extension}`, { type: file.type });
 			const form = new FormData();
-			form.append("file", file);
+			form.append("file", stamped);
 			const response = await fetch("/api/admin/images", { method: "POST", credentials: "same-origin", body: form });
 			const data = await response.json() as { uploaded?: boolean; url?: string; error?: string };
 			if (!response.ok || !data.uploaded || !data.url) throw new Error(data.error || "图片上传失败。");
@@ -1272,7 +1276,9 @@ const iconPaths: Record<string, string> = {
 	private insertUploadedImage(url: string, file: File, range: [number, number]) {
 		const target = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
 		if (!target) return;
-		const alt = (file.name || "粘贴的图片").replace(/\.[^.]+$/, "");
+		const rawAlt = (file.name || "").replace(/\.[^.]+$/, "");
+		// 浏览器给剪贴板图片的默认名（image / clipboard / blob）没有意义，换成中文。
+		const alt = /^(image|clipboard|blob|paste[0-9-]*)$/i.test(rawAlt) || !rawAlt ? "图片" : rawAlt;
 		const start = Math.min(range[0], target.value.length);
 		const end = Math.min(range[1], target.value.length);
 		this.uploadedImages.set(url, URL.createObjectURL(file));

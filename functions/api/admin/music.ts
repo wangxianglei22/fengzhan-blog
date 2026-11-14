@@ -1,4 +1,4 @@
-import { authenticate, corsHeaders, deleteRepoFile, handleError, json, readDataFile, writeBinaryFile, writeDataFile, unauthorized, type Context } from "./_shared";
+import { authenticate, corsHeaders, deleteRepoFile, GithubError, handleError, json, readDataFile, repoFileSha, writeBinaryFile, writeDataFile, unauthorized, type Context } from "./_shared";
 
 const fallback = `<!-- \u6bcf\u9996\u6b4c\u66f2\u7528\u4e00\u6bb5 --- \u5305\u8d77\u6765\uff0c\u97f3\u9891\u6587\u4ef6\u653e\u5728 public/audio/ -->
 ---
@@ -68,8 +68,23 @@ export const onRequestPost = async ({ request, env }: Context) => {
 					corsHeaders,
 				);
 			}
-			await writeBinaryFile(env, `public/audio/${safeName}`, bytes, `上传音乐：${safeName}`);
-			return json({ uploaded: true, name: safeName, url: `/audio/${safeName.split("/").map(encodeURIComponent).join("/")}` }, 201, corsHeaders);
+			const dotIndex = safeName.lastIndexOf(".");
+			const base = dotIndex > 0 ? safeName.slice(0, dotIndex) : safeName;
+			const suffix = dotIndex > 0 ? safeName.slice(dotIndex) : "";
+			// 同名音频不覆盖：GitHub 对「已存在但没给 sha」的 PUT 返回 422，先查再加序号。
+			for (let attempt = 0; attempt < 20; attempt += 1) {
+				const name = attempt === 0 ? safeName : `${base}-${attempt + 1}${suffix}`;
+				const target = `public/audio/${name}`;
+				if (await repoFileSha(env, target)) continue;
+				try {
+					await writeBinaryFile(env, target, bytes, `上传音乐：${name}`);
+					return json({ uploaded: true, name, url: `/audio/${name.split("/").map(encodeURIComponent).join("/")}` }, 201, corsHeaders);
+				} catch (error) {
+					if (error instanceof GithubError && (error.status === 409 || error.status === 422)) continue;
+					throw error;
+				}
+			}
+			return json({ error: "同名音频过多，请修改文件名后重试。" }, 409, corsHeaders);
 		}
 		const body = await request.json() as { source?: unknown; sha?: unknown };
 		if (typeof body.source !== "string" || !body.source.trim()) return json({ error: "\u6b4c\u5355\u5185\u5bb9\u4e0d\u80fd\u4e3a\u7a7a\u3002" }, 400, corsHeaders);
