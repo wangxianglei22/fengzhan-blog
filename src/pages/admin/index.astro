@@ -139,6 +139,19 @@ const formatBytes = (bytes: number) => {
 	return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
 
+/**
+ * 从音频文件名里拆出歌名和歌手：以第一个短横线为界。
+ * 例如「大江南 - 刀郎.mp3」→ 歌名「大江南」、歌手「刀郎」；没有短横线时整名当歌名。
+ */
+function splitAudioFileName(fileName: string) {
+	const cleaned = fileName.replace(/\.[^.]+$/, "").trim();
+	// 文件名里常用下划线代替空格，顺手整理一下。
+	const tidy = (part: string) => part.replace(/_+/g, " ").replace(/\s+/g, " ").trim();
+	const match = /^(.+?)\s*[\u002D\uFF0D\u2013\u2014]\s*(.+)$/.exec(cleaned);
+	if (!match) return { title: tidy(cleaned), artist: "" };
+	return { title: tidy(match[1]), artist: tidy(match[2]) };
+}
+
 const iconPaths: Record<string, string> = {
 		home: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
 		posts: '<path d="M5 3h10l4 4v14H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M14 3v5h5M7 12h10M7 16h10"/>',
@@ -608,9 +621,43 @@ const iconPaths: Record<string, string> = {
 			}
 		}
 
+		/** 手动输入或粘贴音频路径后，也按「歌名 - 歌手」把空的标题和歌手补上。 */
+		private fillMusicFromPath(input: HTMLInputElement) {
+			if (this.module !== "music" || input.dataset.recordKey !== "url") return;
+			const index = Number(input.dataset.recordIndex);
+			const record = index < 0 ? this.recordDraft : this.moduleRecords[index];
+			const value = input.value.trim();
+			if (!record || !value) return;
+			let name = value.split("/").pop() || "";
+			try {
+				name = decodeURIComponent(name);
+			} catch {
+				// 路径里有不合法转义时保持原样，不影响其它逻辑。
+			}
+			const { title, artist } = splitAudioFileName(name);
+			let changed = false;
+			if (!String(record.title || "").trim() && title) {
+				record.title = title;
+				changed = true;
+			}
+			if (!String(record.artist || "").trim() && artist) {
+				record.artist = artist;
+				changed = true;
+			}
+			if (changed) {
+				this.moduleState = "未保存";
+				// change 事件发生在失焦之后，这里重渲染不会抢走光标。
+				this.renderModuleEditor();
+			}
+		}
+
 		/** 素材库里的文件输入变化 → 直接上传。 */
 		private handleChange(event: Event) {
 			if (!(event.target instanceof HTMLInputElement)) return;
+			if (event.target.dataset.recordKey === "url") {
+				this.fillMusicFromPath(event.target);
+				return;
+			}
 			if (event.target.dataset.audioField !== undefined) {
 				const picked = event.target.files?.[0] ?? null;
 				event.target.value = "";
@@ -626,7 +673,7 @@ const iconPaths: Record<string, string> = {
 
 		private async uploadMediaFile(kind: "image" | "audio", file: File) {
 			if (this.mediaUploading) return;
-			const limit = kind === "image" ? 10 * 1024 * 1024 : 25 * 1024 * 1024;
+			const limit = kind === "image" ? 20 * 1024 * 1024 : 25 * 1024 * 1024;
 			if (file.size > limit) {
 				this.mediaNotice = `文件 ${(file.size / 1024 / 1024).toFixed(1)} MiB，超过 ${kind === "image" ? "10" : "25"} MiB 上限，请压缩后再上传。`;
 				this.renderMedia();
@@ -699,9 +746,12 @@ const iconPaths: Record<string, string> = {
 			const record = picker.index < 0 ? this.recordDraft : this.moduleRecords[picker.index];
 			if (record) {
 				record[picker.key] = url;
-				if (this.module === "music" && picker.key === "url" && !String(record.title || "").trim()) {
+				if (this.module === "music" && picker.key === "url") {
 					const name = decodeURIComponent(url.split("/").pop() || "");
-					record.title = name.replace(/\.[^.]+$/, "");
+					const { title, artist } = splitAudioFileName(name);
+					// 只填空字段，用户手填过的值不动。
+					if (!String(record.title || "").trim()) record.title = title;
+					if (!String(record.artist || "").trim()) record.artist = artist;
 				}
 			}
 			this.mediaPicker = null;
@@ -960,7 +1010,10 @@ const iconPaths: Record<string, string> = {
 				const record = target.index < 0 ? this.recordDraft : this.moduleRecords[target.index];
 				if (record) {
 					record[target.key] = data.url;
-					if (!String(record.title || "").trim()) record.title = file.name.replace(/\.[^.]+$/, "");
+					const { title, artist } = splitAudioFileName(file.name);
+					// 只填空字段，用户手填过的值不动。
+					if (!String(record.title || "").trim()) record.title = title;
+					if (!String(record.artist || "").trim()) record.artist = artist;
 				}
 				this.moduleState = "未保存";
 				this.uploadStatus = `已上传 ${data.name || file.name}，已填进文件路径，记得点「保存配置」。`;
@@ -982,7 +1035,7 @@ const iconPaths: Record<string, string> = {
 					<header class="admin-modal-head"><strong>${title}</strong><button class="admin-icon-button" data-image-action="cancel" type="button" aria-label="关闭">✕</button></header>
 					<div class="admin-modal-body">
 						<label class="admin-upload-file-label">选择图片文件<input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif,.jpg,.jpeg,.png,.gif,.webp,.avif" data-image-file /></label>
-						<small class="admin-upload-hint">支持 jpg / png / gif / webp / avif，单个文件不超过 10 MiB。图片会提交到仓库的 public/images/uploads/，等下次构建完成后才能访问。</small>
+						<small class="admin-upload-hint">支持 jpg / png / gif / webp / avif，单个文件不超过 20 MiB。图片会提交到仓库的 public/images/uploads/，等下次构建完成后才能访问。</small>
 						<small class="admin-upload-status" data-image-status role="status">${escapeHtml(this.imageStatus)}</small>
 					</div>
 					<footer class="admin-modal-foot"><button class="admin-secondary-button" data-image-action="cancel" type="button">取消</button><button class="admin-primary-button" data-image-action="confirm" type="button">开始上传</button></footer>
@@ -1028,9 +1081,9 @@ const iconPaths: Record<string, string> = {
 				this.setImageStatus("请先选择一张图片。");
 				return;
 			}
-			const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+			const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 			if (file.size > MAX_IMAGE_BYTES) {
-				this.setImageStatus(`图片 ${(file.size / 1024 / 1024).toFixed(1)} MiB，超过 10 MiB 上限。请压缩或转成 WebP 后再上传。`);
+				this.setImageStatus(`图片 ${(file.size / 1024 / 1024).toFixed(1)} MiB，超过 20 MiB 上限。请压缩或转成 WebP 后再上传。`);
 				return;
 			}
 			const target = this.imageTarget;
@@ -1239,8 +1292,8 @@ const iconPaths: Record<string, string> = {
 			this.showImageToast("只支持 jpg / png / gif / webp / avif 图片。", "error");
 			return;
 		}
-		if (file.size > 10 * 1024 * 1024) {
-			this.showImageToast(`图片 ${(file.size / 1024 / 1024).toFixed(1)} MiB，超过 10 MiB 上限，请压缩后再粘贴。`, "error");
+		if (file.size > 20 * 1024 * 1024) {
+			this.showImageToast(`图片 ${(file.size / 1024 / 1024).toFixed(1)} MiB，超过 20 MiB 上限，请压缩后再粘贴。`, "error");
 			return;
 		}
 		const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");

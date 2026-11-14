@@ -16,8 +16,8 @@ import {
  * 返回 { uploaded, name, url }，url 可以直接写进 Markdown 或封面地址。
  */
 const allowedExtensions = ["jpg", "jpeg", "png", "gif", "webp", "avif"];
-// 图片超过 10 MiB 已经明显拖慢页面，这里比 Cloudflare Pages 的 25 MiB 硬上限更严。
-const maxImageBytes = 10 * 1024 * 1024;
+// 图片超过 20 MiB 已经明显拖慢页面，这里比 Cloudflare Pages 的 25 MiB 硬上限更严。
+const maxImageBytes = 20 * 1024 * 1024;
 const uploadDir = "public/images/uploads";
 
 function fail(message: string, status = 400) {
@@ -52,7 +52,7 @@ export const onRequestPost = async ({ request, env }: Context) => {
 		if (bytes.byteLength > maxImageBytes) {
 			return json(
 				{
-					error: `图片文件 ${(bytes.byteLength / 1024 / 1024).toFixed(1)} MiB，超过 10 MiB 上限。请压缩或转成 WebP 后再上传。`,
+					error: `图片文件 ${(bytes.byteLength / 1024 / 1024).toFixed(1)} MiB，超过 20 MiB 上限。请压缩或转成 WebP 后再上传。`,
 				},
 				413,
 				corsHeaders,
