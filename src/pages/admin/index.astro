@@ -444,7 +444,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 					</div>
 					<div class="admin-writing-split">
 						<textarea class="admin-body-input" name="body" placeholder="从这里开始写正文，支持 Markdown…，也可以直接 Ctrl+V 粘贴图片" aria-label="正文（Markdown）" spellcheck="false">${escapeHtml(item.body)}</textarea>
-						<aside class="admin-preview" data-preview aria-label="正文实时预览"></aside>
+						<aside class="admin-preview${this.previewCollapsed ? " is-collapsed" : ""}" data-preview aria-label="正文实时预览"></aside>
 					</div>
 				</div>
 			</form>`;
@@ -739,6 +739,10 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		}
 
 		private previewTimer = 0;
+		// 宽屏下预览默认常显，用 is-collapsed 记住用户的手动收起。
+		private previewCollapsed = false;
+		// 同一张图拖入两次时复用已上传的地址，避免重复占仓库体积。
+		private uploadedFiles = new Map<string, string>();
 	// 刚上传的图片还没随仓库构建上线，先用本地 object URL 让预览立即可见。
 	private uploadedImages = new Map<string, string>();
 
@@ -906,6 +910,12 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		}
 		const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
 		const range: [number, number] = area ? [area.selectionStart, area.selectionEnd] : [0, 0];
+		const cacheKey = `${file.name}:${file.size}:${file.lastModified}`;
+		const cached = this.uploadedFiles.get(cacheKey);
+		if (cached) {
+			this.insertUploadedImage(cached, file, range);
+			return;
+		}
 		this.showImageToast("正在上传图片…", "info");
 		this.setBusy(true);
 		try {
@@ -914,22 +924,28 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 			const response = await fetch("/api/admin/images", { method: "POST", credentials: "same-origin", body: form });
 			const data = await response.json() as { uploaded?: boolean; url?: string; error?: string };
 			if (!response.ok || !data.uploaded || !data.url) throw new Error(data.error || "图片上传失败。");
-			const target = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
-			if (!target) throw new Error("找不到正文输入框。");
-			const alt = (file.name || "粘贴的图片").replace(/\.[^.]+$/, "");
-			const start = Math.min(range[0], target.value.length);
-			const end = Math.min(range[1], target.value.length);
-			this.uploadedImages.set(data.url, URL.createObjectURL(file));
-			target.setRangeText(`![${alt}](${data.url})`, start, end, "end");
-			target.focus();
-			target.dispatchEvent(new Event("input", { bubbles: true }));
-			this.updatePreview();
-			this.showImageToast("图片已插入正文。", "info");
+			this.uploadedFiles.set(cacheKey, data.url);
+			this.insertUploadedImage(data.url, file, range);
 		} catch (error) {
 			this.showImageToast(error instanceof Error ? error.message : "图片上传失败。", "error");
 		} finally {
 			this.setBusy(false);
 		}
+	}
+
+	// 按记录的光标位置把图片插进正文；预览用本地地址，避免等下次构建。
+	private insertUploadedImage(url: string, file: File, range: [number, number]) {
+		const target = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
+		if (!target) return;
+		const alt = (file.name || "粘贴的图片").replace(/\.[^.]+$/, "");
+		const start = Math.min(range[0], target.value.length);
+		const end = Math.min(range[1], target.value.length);
+		this.uploadedImages.set(url, URL.createObjectURL(file));
+		target.setRangeText(`![${alt}](${url})`, start, end, "end");
+		target.focus();
+		target.dispatchEvent(new Event("input", { bubbles: true }));
+		this.updatePreview();
+		this.showImageToast("图片已插入正文。", "info");
 	}
 
 	private handlePaste = (event: ClipboardEvent) => {
@@ -950,7 +966,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 	private handleDragOver = (event: DragEvent) => {
 		const target = event.target;
 		if (!(target instanceof Element) || !target.closest("#editor-form")) return;
-		if (!event.dataTransfer) return;
+		if (!event.dataTransfer || !event.dataTransfer.types.includes("Files")) return;
 		event.preventDefault();
 		event.dataTransfer.dropEffect = "copy";
 	};
@@ -980,8 +996,8 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 				list: `- ${selected || "列表项"}`,
 				link: `[${selected || "链接文字"}](https://)`,
 				code: `\`\`\`\n${selected || "const hello = \"world\";"}\n\`\`\``,
-				image: `![${selected || "????"}](/images/example.jpg)`,
-				table: `| ?? | ?? |\n| --- | --- |\n| ${selected || "??"} | ?? |`,
+				image: `![${selected || "图片说明"}](/images/example.jpg)`,
+				table: `| 表头 | 表头 |\n| --- | --- |\n| ${selected || "内容"} | 内容 |`,
 				rule: "\n---\n",
 			};
 			if (!snippets[format]) return;
@@ -1035,7 +1051,16 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 			}
 			if (button.dataset.previewToggle !== undefined) {
 				const preview = this.querySelector<HTMLElement>(".admin-preview");
-				preview?.classList.toggle("is-open");
+				if (preview) {
+					const wide = window.matchMedia("(min-width: 1280px)").matches;
+					const className = wide ? "is-collapsed" : "is-open";
+					preview.classList.toggle(className);
+					const hidden = wide
+						? preview.classList.contains("is-collapsed")
+						: !preview.classList.contains("is-open");
+					this.previewCollapsed = hidden;
+					button.classList.toggle("is-active", !hidden);
+				}
 				return;
 			}
 			if (button.dataset.imageTarget) {
@@ -1282,6 +1307,8 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 	.admin-writing-split { display: grid; gap: 1.4rem; }
 	.admin-preview { display: none; padding: 1.5rem 1.35rem; border: 1px solid #e6edf1; border-radius: 0.9rem; color: #2f3a41; background: #fbfdfe; font-size: 0.92rem; line-height: 1.85; overflow-wrap: anywhere; }
 	.admin-preview.is-open { display: block; }
+	/* 宽屏默认常显，这里用更高优先级让 ◧ 真正能收起 */
+	.admin-preview.is-collapsed { display: none; }
 	.admin-preview > :first-child { margin-top: 0; }
 	.admin-preview h1, .admin-preview h2, .admin-preview h3, .admin-preview h4 { margin: 1.35em 0 0.5em; font-weight: 700; line-height: 1.35; }
 	.admin-preview h1 { font-size: 1.34rem; }
