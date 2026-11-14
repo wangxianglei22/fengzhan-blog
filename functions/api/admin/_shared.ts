@@ -306,6 +306,33 @@ export async function deleteRepoFile(env: Env, path: string, message: string) {
 	return true;
 }
 
+export type RepoDirEntry = {
+	name: string;
+	path: string;
+	type: string;
+	size: number;
+};
+
+/**
+ * 列出仓库里某个目录的条目（只列一层，子目录会以 type: "dir" 返回）。
+ * 目录不存在时返回空数组，方便对可选目录做容错。
+ */
+export async function listRepoDirectory(env: Env, directory: string): Promise<RepoDirEntry[]> {
+	const config = getGithubConfig(env);
+	let response: Response;
+	try {
+		response = await githubRequest(env, `/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}/contents/${encodePath(directory)}?ref=${encodeURIComponent(config.branch)}`);
+	} catch (error) {
+		if (error instanceof GithubError && error.status === 404) return [];
+		throw error;
+	}
+	const items = await response.json() as Array<{ name?: string; path?: string; type?: string; size?: number }>;
+	if (!Array.isArray(items)) return [];
+	return items
+		.filter((item) => Boolean(item.name && item.path))
+		.map((item) => ({ name: item.name as string, path: item.path as string, type: item.type || "file", size: item.size || 0 }));
+}
+
 export async function writeBinaryFile(env: Env, path: string, bytes: Uint8Array, message: string, sha?: string) {
 	const config = getGithubConfig(env);
 	return githubRequest(env, `/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}/contents/${encodePath(path)}`, {

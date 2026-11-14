@@ -119,7 +119,16 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		"'": "&#39;",
 	}[character] || character));
 	const tagsFromInput = (value: string) => value.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean);
-	const iconPaths: Record<string, string> = {
+	type MediaItem = { name: string; path: string; url: string; size: number };
+
+const formatBytes = (bytes: number) => {
+	if (!bytes) return "0 KB";
+	if (bytes < 1024) return `${bytes} B`;
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+	return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+};
+
+const iconPaths: Record<string, string> = {
 		home: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
 		posts: '<path d="M5 3h10l4 4v14H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M14 3v5h5M7 12h10M7 16h10"/>',
 		diary: '<rect x="4" y="4" width="16" height="17" rx="2"/><path d="M8 2v4M16 2v4M4 9h16M8 13h3M8 17h6"/>',
@@ -133,6 +142,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		guestbook: '<path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-7l-5 4v-4H6a2 2 0 0 1-2-2z"/><path d="M8 8h8M8 12h5"/>',
 		friends: '<path d="M16 20a4 4 0 0 0-8 0"/><circle cx="12" cy="8" r="3"/><path d="M20 20a4 4 0 0 0-3-3.87M17 5.13a3 3 0 0 1 0 5.74M4 20a4 4 0 0 1 3-3.87M7 5.13a3 3 0 0 0 0 5.74"/>',
 	upload: '<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',
+	media: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 17 5-4 4 3 3-2 4 3"/>',
 	};
 	const icon = (name: string) => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[name]}</svg>`;
 	const moodEmojis = ["😀", "😊", "😌", "🤍", "🥰", "😎", "🤔", "😴", "🥳", "😭", "😤", "😮", "🤗", "🙃", "🌈", "✨", "🌙", "☀️", "🍀", "🎧"];
@@ -162,6 +172,12 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 
 	class AdminApp extends HTMLElement {
 		private kind: CollectionName = "posts";
+		/** 素材库是独立视图，不参与文章/日记的 kind 切换。 */
+		private mediaView = false;
+		private mediaImages: MediaItem[] = [];
+		private mediaAudio: MediaItem[] = [];
+		private mediaLoading = false;
+		private mediaNotice = "";
 		private module: AdminModule | null = null;
 		private items: Entry[] = [];
 		private current: Entry | null = null;
@@ -260,19 +276,118 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		private renderWorkspace() {
 			this.innerHTML = `<section class="admin-workspace">
 				<aside class="admin-rail" aria-label="\u540e\u53f0\u5bfc\u822a">
-					<button class="admin-rail-button ${!this.module && this.kind === "posts" ? "is-active" : ""}" data-kind="posts" type="button" aria-label="\u6587\u7ae0" title="\u6587\u7ae0">${icon("posts")}</button>
-					<button class="admin-rail-button ${!this.module && this.kind === "diary" ? "is-active" : ""}" data-kind="diary" type="button" aria-label="\u65e5\u8bb0" title="\u65e5\u8bb0">${icon("diary")}</button>
+					<button class="admin-rail-button ${!this.module && !this.mediaView && this.kind === "posts" ? "is-active" : ""}" data-kind="posts" type="button" aria-label="\u6587\u7ae0" title="\u6587\u7ae0">${icon("posts")}</button>
+					<button class="admin-rail-button ${!this.module && !this.mediaView && this.kind === "diary" ? "is-active" : ""}" data-kind="diary" type="button" aria-label="\u65e5\u8bb0" title="\u65e5\u8bb0">${icon("diary")}</button>
 					<button class="admin-rail-button ${this.module === "music" ? "is-active" : ""}" data-module="music" type="button" aria-label="\u97f3\u4e50" title="\u97f3\u4e50">${icon("music")}</button>
 					<button class="admin-rail-button ${this.module === "honors" ? "is-active" : ""}" data-module="honors" type="button" aria-label="\u8363\u8a89\u5899" title="\u8363\u8a89\u5899">${icon("honors")}</button>
 					<button class="admin-rail-button ${this.module === "friends" ? "is-active" : ""}" data-module="friends" type="button" aria-label="\u5e38\u7528\u7f51\u7ad9" title="\u5e38\u7528\u7f51\u7ad9">${icon("friends")}</button>
 					<button class="admin-rail-button ${this.module === "guestbook" ? "is-active" : ""}" data-module="guestbook" type="button" aria-label="\u7559\u8a00\u677f" title="\u7559\u8a00\u677f">${icon("guestbook")}</button>
+					<button class="admin-rail-button ${this.mediaView ? "is-active" : ""}" data-kind="media" type="button" aria-label="素材库" title="素材库">${icon("media")}</button>
 					<div class="admin-rail-spacer"></div>
 					<button class="admin-rail-button" data-action="logout" type="button" aria-label="\u9000\u51fa\u767b\u5f55" title="\u9000\u51fa\u767b\u5f55">${icon("logout")}</button>
 				</aside>
-				<aside class="admin-sidebar">${this.module ? this.moduleSidebar() : this.contentSidebar()}</aside>
+				<aside class="admin-sidebar">${this.module ? this.moduleSidebar() : this.mediaView ? this.mediaSidebar() : this.contentSidebar()}</aside>
 				<section class="admin-editor" data-editor></section>
 			</section>`;
 			if (this.module) this.renderModuleEditor();
+			else if (this.mediaView) this.renderMedia();
+		}
+
+		private mediaSidebar() {
+			return `<div class="admin-side-intro"><p class="admin-eyebrow">MEDIA LIBRARY</p><div class="admin-side-title"><h1>素材库</h1></div><p class="admin-module-sidebar-copy">所有已上传的图片和音频都放在这里，点一下路径就能复制，直接贴到封面、头像或正文里。</p></div>
+				<div class="admin-module-side-card"><span class="admin-module-side-icon">${icon("media")}</span><strong>图片 ${this.mediaImages.length} 张</strong><small>public/images 下的所有图片</small></div>
+				<div class="admin-module-side-card"><span class="admin-module-side-icon">${icon("music")}</span><strong>音频 ${this.mediaAudio.length} 个</strong><small>public/audio 下的所有音频</small></div>
+				<div class="admin-sidebar-footer"><span class="admin-status-dot"></span><span>GitHub 内容源</span></div>`;
+		}
+
+		private async loadMedia() {
+			this.mediaLoading = true;
+			this.mediaNotice = "";
+			this.renderMedia();
+			try {
+				const response = await fetch("/api/admin/media", { credentials: "same-origin" });
+				const data = await response.json() as { images?: MediaItem[]; audio?: MediaItem[]; error?: string };
+				if (!response.ok) throw new Error(data.error || "素材读取失败。");
+				this.mediaImages = Array.isArray(data.images) ? data.images : [];
+				this.mediaAudio = Array.isArray(data.audio) ? data.audio : [];
+			} catch (error) {
+				this.mediaNotice = error instanceof Error ? error.message : "素材读取失败。";
+			} finally {
+				this.mediaLoading = false;
+				this.renderWorkspace();
+			}
+		}
+
+		private renderMedia() {
+			const editor = this.querySelector<HTMLElement>("[data-editor]");
+			if (!editor || !this.mediaView) return;
+			const stateText = this.mediaLoading
+				? "正在读取素材…"
+				: `图片 ${this.mediaImages.length} 张 · 音频 ${this.mediaAudio.length} 个`;
+			const notice = this.mediaNotice
+				? `<p class="admin-notice">${escapeHtml(this.mediaNotice)}</p>`
+				: "";
+			const imageCards = this.mediaImages.map((item) => `<figure class="admin-media-card">
+				<img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.name)}" loading="lazy" decoding="async" />
+				<figcaption>
+					<strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong>
+					<button class="admin-media-path" data-copy="${escapeHtml(item.url)}" type="button" title="点击复制路径">${escapeHtml(item.url)}</button>
+					<span class="admin-media-actions"><small>${formatBytes(item.size)}</small><button class="admin-media-link" data-copy="${escapeHtml(`![${item.name.replace(/\.[^.]+$/, "")}](${item.url})`)}" type="button">复制 Markdown</button><button class="admin-media-link admin-media-del" data-media-delete="${escapeHtml(item.path)}" type="button">删除</button></span>
+				</figcaption>
+			</figure>`).join("");
+			const audioRows = this.mediaAudio.map((item) => `<div class="admin-media-row">
+				<div class="admin-media-row-main">
+					<strong>${escapeHtml(item.name)}</strong>
+					<button class="admin-media-path" data-copy="${escapeHtml(item.url)}" type="button" title="点击复制路径">${escapeHtml(item.url)}</button>
+					<small>${formatBytes(item.size)}</small>
+				</div>
+				<audio controls preload="none" src="${escapeHtml(item.url)}"></audio>
+				<button class="admin-icon-button admin-danger-button" data-media-delete="${escapeHtml(item.path)}" type="button" aria-label="删除音频" title="删除音频">${icon("trash")}</button>
+			</div>`).join("");
+			editor.innerHTML = `<div class="admin-editor-topbar">
+				<span class="admin-save-state" role="status">${escapeHtml(stateText)}</span>
+				<div class="admin-editor-actions"><button class="admin-secondary-button" data-media-refresh type="button">刷新列表</button></div>
+			</div>
+			${notice}
+			<div class="admin-media">
+				<section class="admin-media-section"><h2>图片<small>点在路径上即可复制；封面、头像、正文都能直接用</small></h2>
+					${this.mediaImages.length ? `<div class="admin-media-grid">${imageCards}</div>` : `<p class="admin-media-empty">还没有图片，去文章编辑器里粘贴或上传一张吧。</p>`}
+				</section>
+				<section class="admin-media-section"><h2>音频<small>歌单里的 url 字段填这里的路径</small></h2>
+					${this.mediaAudio.length ? `<div class="admin-media-list">${audioRows}</div>` : `<p class="admin-media-empty">还没有音频，去音乐管理里上传一首吧。</p>`}
+				</section>
+			</div>`;
+		}
+
+		private async copyText(text: string, label = "路径") {
+			try {
+				await navigator.clipboard.writeText(text);
+				this.showImageToast(`${label}已复制：${text}`, "info");
+			} catch {
+				const helper = document.createElement("textarea");
+				helper.value = text;
+				helper.style.position = "fixed";
+				helper.style.opacity = "0";
+				document.body.append(helper);
+				helper.select();
+				document.execCommand("copy");
+				helper.remove();
+				this.showImageToast(`${label}已复制：${text}`, "info");
+			}
+		}
+
+		private async deleteMedia(path: string) {
+			const name = path.split("/").pop() || path;
+			if (!window.confirm(`确定从仓库删除「${name}」吗？这会提交一次 GitHub 删除提交，无法撤回。`)) return;
+			try {
+				const response = await fetch(`/api/admin/media?path=${encodeURIComponent(path)}`, { method: "DELETE", credentials: "same-origin" });
+				const data = await response.json() as { deleted?: boolean; error?: string };
+				if (!response.ok) throw new Error(data.error || "删除失败。");
+				this.showImageToast(`已删除 ${name}`, "info");
+				await this.loadMedia();
+			} catch (error) {
+				this.showImageToast(error instanceof Error ? error.message : "删除失败。", "error");
+			}
 		}
 
 		private async loadItems() {
@@ -1043,7 +1158,7 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 		private async handleClick(event: Event) {
 			const target = event.target;
 			if (!(target instanceof Element)) return;
-			const button = target.closest<HTMLButtonElement>("button[data-action], button[data-kind], button[data-module], button[data-module-action], button[data-upload-action], button[data-image-target], button[data-image-action], button[data-preview-toggle], button[data-format], button[data-emoji]");
+			const button = target.closest<HTMLButtonElement>("button[data-action], button[data-kind], button[data-module], button[data-module-action], button[data-upload-action], button[data-image-target], button[data-image-action], button[data-copy], button[data-media-delete], button[data-media-refresh], button[data-preview-toggle], button[data-format], button[data-emoji]");
 			if (!button || this.busy) return;
 			if (button.dataset.emoji) {
 				this.chooseEmoji(button.dataset.emoji, button);
@@ -1127,11 +1242,31 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 			}
 			if (button.dataset.kind) {
 				this.module = null;
+				if (button.dataset.kind === "media") {
+					this.mediaView = true;
+					this.current = null;
+					this.notice = "";
+					await this.loadMedia();
+					return;
+				}
+				this.mediaView = false;
 				this.kind = button.dataset.kind as CollectionName;
 				this.current = null;
 				this.notice = "";
 				this.renderWorkspace();
 				await this.loadItems();
+				return;
+			}
+			if (button.dataset.copy) {
+				await this.copyText(button.dataset.copy);
+				return;
+			}
+			if (button.dataset.mediaDelete) {
+				await this.deleteMedia(button.dataset.mediaDelete);
+				return;
+			}
+			if (button.dataset.mediaRefresh !== undefined) {
+				await this.loadMedia();
 				return;
 			}
 			switch (button.dataset.action) {
@@ -1340,6 +1475,33 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 	.admin-dark .admin-preview-empty { color: #829198; }
 	.admin-dark .admin-image-toast { background: #2f7fbc; }
 	.admin-dark .admin-image-toast[data-tone="error"] { background: #a8433f; }
+	.admin-media { display: grid; gap: 2rem; padding: 1.75rem clamp(1.25rem, 3vw, 2.5rem) 3rem; }
+	.admin-media-section h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem; margin: 0 0 1rem; font-size: 1.05rem; font-weight: 700; }
+	.admin-media-section h2 small { color: #7b8b93; font-size: 0.76rem; font-weight: 400; }
+	.admin-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.9rem; }
+	.admin-media-card { display: grid; gap: 0.5rem; margin: 0; padding: 0.6rem; border: 1px solid #e6edf1; border-radius: 0.8rem; background: #fbfdfe; }
+	.admin-media-card img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; border-radius: 0.55rem; background: #eef4f8; }
+	.admin-media-card figcaption { display: grid; gap: 0.3rem; min-width: 0; }
+	.admin-media-card strong { overflow: hidden; font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
+	.admin-media-path { overflow: hidden; padding: 0.2rem 0.35rem; border: 1px dashed #cfdde5; border-radius: 0.4rem; color: #2f7fbc; background: #f2f8fc; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.66rem; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+	.admin-media-path:hover { border-color: #9cc7ec; background: #e7f2fb; }
+	.admin-media-actions { display: flex; align-items: center; gap: 0.4rem; color: #8a9aa2; font-size: 0.68rem; }
+	.admin-media-link { padding: 0; border: 0; color: #2f7fbc; background: transparent; font-size: 0.68rem; cursor: pointer; }
+	.admin-media-link:hover { text-decoration: underline; }
+	.admin-media-del { color: #c0504d; }
+	.admin-media-list { display: grid; gap: 0.6rem; }
+	.admin-media-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(12rem, 18rem) auto; align-items: center; gap: 0.75rem; padding: 0.6rem 0.75rem; border: 1px solid #e6edf1; border-radius: 0.7rem; background: #fbfdfe; }
+	.admin-media-row-main { display: grid; gap: 0.18rem; min-width: 0; }
+	.admin-media-row-main strong { overflow: hidden; font-size: 0.84rem; text-overflow: ellipsis; white-space: nowrap; }
+	.admin-media-row-main small { color: #8a9aa2; font-size: 0.7rem; }
+	.admin-media-row audio { width: 100%; height: 2rem; }
+	.admin-media-empty { padding: 1.2rem; border: 1px dashed #d7e3ea; border-radius: 0.7rem; color: #8a9aa2; font-size: 0.84rem; text-align: center; }
+	@media (max-width: 767px) { .admin-media-row { grid-template-columns: minmax(0, 1fr); } }
+	.admin-dark .admin-media-card, .admin-dark .admin-media-row { border-color: #40505a; background: #232d34; }
+	.admin-dark .admin-media-card img { background: #2d3941; }
+	.admin-dark .admin-media-path { border-color: #4a5b64; color: #8fbde8; background: #26323a; }
+	.admin-dark .admin-media-section h2 small, .admin-dark .admin-media-row-main small, .admin-dark .admin-media-actions { color: #93a3ab; }
+	.admin-dark .admin-media-empty { border-color: #46555e; color: #93a3ab; }
 
 	.admin-editor-form { padding: 2.25rem clamp(1.75rem, 4vw, 4.5rem) 4rem; }
 	.admin-writing-surface { width: min(100%, 58rem); margin: 0 auto; }
