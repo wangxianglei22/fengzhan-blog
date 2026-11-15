@@ -58,6 +58,14 @@ export const corsHeaders = {
 	"cache-control": "no-store",
 };
 
+/**
+ * 列表接口允许浏览器缓存一小会儿：后台在标签页之间来回切时不用每趟都走网络。
+ * 交互动过数据（保存/删除）会带 ?fresh=1 并配 no-store，保证看到的是最新的。
+ */
+export const listCacheHeaders = {
+	"cache-control": "private, max-age=20, stale-while-revalidate=60",
+};
+
 const securityHeaders = {
 	"x-content-type-options": "nosniff",
 	"x-frame-options": "SAMEORIGIN",

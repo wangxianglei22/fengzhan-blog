@@ -1,10 +1,11 @@
-import { authenticate, corsHeaders, handleError, json, listEntries, saveEntry, unauthorized, type Context } from "./_shared";
+import { authenticate, corsHeaders, handleError, json, listCacheHeaders, listEntries, saveEntry, unauthorized, type Context } from "./_shared";
 
 export const onRequestGet = async ({ request, env }: Context) => {
 	if (!(await authenticate(request, env))) return unauthorized();
 	try {
 		const fresh = new URL(request.url).searchParams.get("fresh") === "1";
-		return json(await listEntries(env, "posts", fresh), 200, corsHeaders);
+		// 刷新请求必须拿最新的，别让浏览器缓存糊弄过去
+		return json(await listEntries(env, "posts", fresh), 200, fresh ? corsHeaders : listCacheHeaders);
 	} catch (error) {
 		return handleError(error);
 	}
