@@ -301,7 +301,8 @@ const iconPaths: Record<string, string> = {
 		/** 登录后顺手把文章和日记两个列表都拉下来，切栏目时就不用再等。 */
 		private warmUpItems(): Promise<void> {
 			if (this.warmupPromise) return this.warmupPromise;
-			const kinds: CollectionName[] = ["posts", "diary"];
+			// 慢链路上先只拉当前栏目，另一栏等首屏落地后再空闲预热
+			const kinds: CollectionName[] = [this.kind];
 			this.warmupPromise = Promise.all(kinds.map(async (kind) => {
 				const key = `admin-items-${kind}`;
 				if (this.readItemsCache(key)) return;
@@ -314,6 +315,7 @@ const iconPaths: Record<string, string> = {
 					// 预热失败无所谓，真正加载时会再试
 				}
 			})).then(() => {
+				this.lastWarmAt = Date.now();
 				this.warmupPromise = null;
 			});
 			return this.warmupPromise;
@@ -386,6 +388,27 @@ const iconPaths: Record<string, string> = {
 				<div class="admin-module-side-card"><span class="admin-module-side-icon">${icon("media")}</span><strong>图片 ${this.mediaImages.length} 张</strong><small>public/images 下的所有图片</small></div>
 				<div class="admin-module-side-card"><span class="admin-module-side-icon">${icon("music")}</span><strong>音频 ${this.mediaAudio.length} 个</strong><small>public/audio 下的所有音频</small></div>
 				<div class="admin-sidebar-footer"><span class="admin-status-dot"></span><span>GitHub 内容源</span></div>`;
+		}
+
+		/** 首屏画完后，空闲时预热另一栏（切过去就能秒开，且不跟首屏抢带宽）。 */
+		private prefetchOtherKind() {
+			const other: CollectionName = this.kind === "posts" ? "diary" : "posts";
+			if (this.module || this.mediaView) return;
+			const key = `admin-items-${other}`;
+			if (this.readItemsCache(key)) return;
+			const run = () => {
+				void fetch(`/api/admin/${other}`, { credentials: "same-origin" })
+					.then(async (response) => {
+						const data = await response.json() as Entry[] | { error?: string };
+						if (!response.ok || !Array.isArray(data)) return;
+						this.writeItemsCache(key, data);
+					})
+					.catch(() => {})
+				;
+			};
+			const ric = (window as Window & { requestIdleCallback?: (cb: () => void, options?: { timeout?: number }) => number }).requestIdleCallback;
+			if (typeof ric === "function") ric(run, { timeout: 3000 });
+			else window.setTimeout(run, 1500);
 		}
 
 		private async loadMedia() {
@@ -486,6 +509,11 @@ const iconPaths: Record<string, string> = {
 				this.items = cachedFirst;
 				this.renderList();
 				this.renderEditor();
+				// 刚预热下来的数据就是新的，别再紧跟一次刷新（慢链路上等于白跑一趟）
+				if (!options.fresh && Date.now() - this.lastWarmAt < 5000) {
+					this.prefetchOtherKind();
+					return;
+				}
 			} else {
 				// 没有缓存就先铺骨架屏，别让人盯着一行灰字
 				this.setList(this.renderListSkeleton());
@@ -497,6 +525,7 @@ const iconPaths: Record<string, string> = {
 				this.items = cached;
 				this.renderList();
 				this.renderEditor();
+				this.prefetchOtherKind();
 				return;
 			}
 			try {
@@ -508,6 +537,7 @@ const iconPaths: Record<string, string> = {
 				this.writeItemsCache(cacheKey, data);
 				this.renderList();
 				this.renderEditor();
+				this.prefetchOtherKind();
 			} catch (error) {
 				if (cached) {
 					// 有缓存就先用着，别把列表整块换成错误文案
@@ -1438,6 +1468,8 @@ const iconPaths: Record<string, string> = {
 	private livePreview: LivePreviewHandle | null = null;
 	/** 预热两个列表的 Promise：登录后并行拉取，loadItems 直接复用，避免重复请求。 */
 	private warmupPromise: Promise<void> | null = null;
+	/** 预热把数据写进缓存的时间：刚预热过的列表不必再立刻刷新一遍。 */
+	private lastWarmAt = 0;
 
 	private schedulePreview() {
 		window.clearTimeout(this.previewTimer);
@@ -1997,6 +2029,10 @@ const iconPaths: Record<string, string> = {
 					this.mediaView = true;
 					this.current = null;
 					this.notice = "";
+					this.mediaLoading = true;
+					// 先把界面切到素材库（侧栏 + “正在读取素材…”），再去拉数据，
+					// 否则慢链路上会像“点了没反应”
+					this.renderWorkspace();
 					await this.loadMedia();
 					return;
 				}
