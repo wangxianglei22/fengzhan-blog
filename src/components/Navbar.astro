@@ -263,8 +263,22 @@ if (!globalScope[navbarBoundKey]) {
 			if (match) { link.setAttribute("aria-current", "page"); } else { link.removeAttribute("aria-current"); }
 		});
 	}
+	// swup 自己的钩子也挂一层：某些情况下 astro:page-load 不会派发，只靠它会漏掉切页
+	type SwupLike = { hooks?: { on?: (name: string, handler: () => unknown) => void }; __navHighlightBound?: boolean };
+	const bindSwupHighlight = () => {
+		const swupInstance = window.swup as unknown as SwupLike | undefined;
+		if (!swupInstance?.hooks?.on || swupInstance.__navHighlightBound) return;
+		swupInstance.__navHighlightBound = true;
+		swupInstance.hooks.on("page:view", updateNavHighlight);
+		updateNavHighlight();
+	};
+	bindSwupHighlight();
+	// 首次加载先算一次：此时 swup 可能还没就绪，不能只依赖它
 	updateNavHighlight();
-	document.addEventListener("astro:page-load", updateNavHighlight);
+	document.addEventListener("astro:page-load", () => {
+		bindSwupHighlight();
+		updateNavHighlight();
+	});
 
 	// 旋转时收起所有浮层，避免手机端的搜索面板在横屏下继续悬浮遮挡页面。
 	function closeFloatingPanels() {
