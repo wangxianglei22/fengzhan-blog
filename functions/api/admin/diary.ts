@@ -3,7 +3,8 @@ import { authenticate, corsHeaders, handleError, json, listEntries, saveEntry, u
 export const onRequestGet = async ({ request, env }: Context) => {
 	if (!(await authenticate(request, env))) return unauthorized();
 	try {
-		return json(await listEntries(env, "diary"), 200, corsHeaders);
+		const fresh = new URL(request.url).searchParams.get("fresh") === "1";
+		return json(await listEntries(env, "diary", fresh), 200, corsHeaders);
 	} catch (error) {
 		return handleError(error);
 	}

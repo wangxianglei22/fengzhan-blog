@@ -390,7 +390,53 @@ export function validatePayload(collection: CollectionName, payload: Record<stri
 	return { ...payload, title, slug, [dateKey]: payload[dateKey] };
 }
 
-export async function listEntries(env: Env, collection: CollectionName) {
+type ListCacheEntry = { at: number; data: Entry[] };
+
+/** 同一个 Worker 实例内的短缓存：后台切来切去不用每次都打 GitHub。 */
+const listCache = new Map<CollectionName, ListCacheEntry>();
+const LIST_CACHE_TTL = 60_000;
+
+/**
+ * 一次 GraphQL 就把整个目录的 Markdown 正文全取回来（Tree 里的 Blob 带 text），
+ * 比「先列目录、再逐文件读」少 N 次往返 —— 本机到 Cloudflare 的每个请求都可能抖几秒。
+ * 失败（网络/权限/结构变化）返回 null，调用方回退到 REST。
+ */
+async function listEntriesViaGraphql(env: Env, collection: CollectionName): Promise<Entry[] | null> {
+	const config = getGithubConfig(env);
+	const query = `query($owner:String!,$repo:String!,$expr:String!){repository(owner:$owner,name:$repo){object(expression:$expr){... on Tree{entries{name type object{... on Blob{oid text}}}}}}}`;
+	let response: Response;
+	try {
+		response = await githubRequest(env, "/graphql", {
+			method: "POST",
+			body: JSON.stringify({ query, variables: { owner: config.owner, repo: config.repo, expr: `${config.branch}:src/content/${collection}` } }),
+		});
+	} catch {
+		return null;
+	}
+	let entries: Array<{ name?: string; type?: string; object?: { oid?: string; text?: string } | null }> | undefined;
+	try {
+		const payload = await response.json() as {
+			data?: { repository?: { object?: { entries?: typeof entries } | null } | null };
+		};
+		entries = payload.data?.repository?.object?.entries ?? undefined;
+	} catch {
+		return null;
+	}
+	if (!Array.isArray(entries)) return null;
+	const normalized: Entry[] = [];
+	for (const entry of entries) {
+		if (entry.type !== "blob" || !entry.name?.endsWith(".md") || !entry.object?.text) continue;
+		try {
+			normalized.push(normalizeEntry(collection, entry.name.replace(/\.md$/, ""), entry.object.oid, entry.object.text));
+		} catch {
+			// 单篇格式异常不应该让整个列表挂掉
+		}
+	}
+	if (!normalized.length) return null;
+	return normalized.sort((a, b) => b.date.localeCompare(a.date));
+}
+
+async function listEntriesViaRest(env: Env, collection: CollectionName): Promise<Entry[]> {
 	const config = getGithubConfig(env);
 	const directory = `src/content/${collection}`;
 	let response: Response;
@@ -410,6 +456,20 @@ export async function listEntries(env: Env, collection: CollectionName) {
 	return entries.filter((entry): entry is Entry => Boolean(entry)).sort((a, b) => b.date.localeCompare(a.date));
 }
 
+export async function listEntries(env: Env, collection: CollectionName, fresh = false) {
+	const cached = listCache.get(collection);
+	const now = Date.now();
+	if (!fresh && cached && now - cached.at < LIST_CACHE_TTL) return cached.data;
+	const entries = (await listEntriesViaGraphql(env, collection)) ?? (await listEntriesViaRest(env, collection));
+	listCache.set(collection, { at: Date.now(), data: entries });
+	return entries;
+}
+
+/** 保存/删除之后清掉缓存，避免后台还显示旧内容。 */
+export function invalidateListCache(collection: CollectionName) {
+	listCache.delete(collection);
+}
+
 export async function getEntry(env: Env, collection: CollectionName, slug: string) {
 	if (!slugIsSafe(slug)) return null;
 	const content = await readFile(env, contentPath(collection, slug));
@@ -423,6 +483,7 @@ export async function saveEntry(env: Env, collection: CollectionName, payload: R
 	if (!currentSlug && existing) throw new GithubError(409, "这个 Slug 已经存在，请换一个。");
 	const source = serializeDocument(collection, valid);
 	const result = await writeFile(env, contentPath(collection, slug), source, `${currentSlug ? "更新" : "创建"}${collection === "posts" ? "文章" : "日记"}：${valid.title}`, existing?.sha);
+	invalidateListCache(collection);
 	return normalizeEntry(collection, slug, result.content?.sha, source);
 }
 
@@ -430,6 +491,7 @@ export async function removeEntry(env: Env, collection: CollectionName, slug: st
 	const existing = await getEntry(env, collection, slug);
 	if (!existing?.sha) throw new GithubError(404, "找不到要删除的内容。");
 	await deleteFile(env, contentPath(collection, slug), existing.sha, `删除${collection === "posts" ? "文章" : "日记"}：${existing.title}`);
+	invalidateListCache(collection);
 }
 
 function getCookies(request: Request) {

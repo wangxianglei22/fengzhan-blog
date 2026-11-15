@@ -135,6 +135,8 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 
 // 编辑模式偏好：默认进编辑器就开实时预览，用户手动切回源码后记住选择
 const EDITOR_MODE_KEY = "fengzhan-editor-mode";
+/** 列表缓存有效期：过了就重新拉，避免一直看旧内容。 */
+const ITEMS_CACHE_TTL = 5 * 60_000;
 
 const formatBytes = (bytes: number) => {
 	if (!bytes) return "0 KB";
@@ -449,20 +451,59 @@ const iconPaths: Record<string, string> = {
 			}
 		}
 
-		private async loadItems() {
-			this.setList(`<div class="admin-list-empty">正在读取内容…</div>`);
+		private async loadItems(options: { fresh?: boolean } = {}) {
+			const cacheKey = `admin-items-${this.kind}`;
+			const cached = options.fresh ? null : this.readItemsCache(cacheKey);
+			if (cached) {
+				// 先把上次的结果画出来，网络慢也不至于一直盯着「正在读取内容…」
+				this.items = cached;
+				this.renderList();
+				this.renderEditor();
+			} else {
+				this.setList(`<div class="admin-list-empty">正在读取内容…</div>`);
+			}
 			try {
-				const response = await fetch(`/api/admin/${this.kind}`, { credentials: "same-origin" });
+				const query = options.fresh ? "?fresh=1" : "";
+				const response = await fetch(`/api/admin/${this.kind}${query}`, { credentials: "same-origin" });
 				const data = await response.json() as Entry[] | { error?: string };
 				if (!response.ok || !Array.isArray(data)) throw new Error((data as { error?: string }).error || "内容读取失败。");
 				this.items = data;
+				this.writeItemsCache(cacheKey, data);
 				this.renderList();
 				this.renderEditor();
 			} catch (error) {
+				if (cached) {
+					// 有缓存就先用着，别把列表整块换成错误文案
+					this.setList(`<div class="admin-list-empty admin-error">刷新失败，显示的是上次的内容。</div>`);
+					return;
+				}
 				this.setList(`<div class="admin-list-empty admin-error">${escapeHtml(error instanceof Error ? error.message : "内容读取失败。")}</div>`);
 				this.renderEditor();
 			}
 		}
+		
+		/** 列表缓存放 sessionStorage：关掉标签页就失效，不会长期显示旧内容。 */
+		private readItemsCache(key: string): Entry[] | null {
+			try {
+				const raw = window.sessionStorage.getItem(key);
+				if (!raw) return null;
+				const parsed = JSON.parse(raw) as { at?: number; items?: Entry[] };
+				if (!parsed?.items || !Array.isArray(parsed.items)) return null;
+				if (Date.now() - Number(parsed.at || 0) > ITEMS_CACHE_TTL) return null;
+				return parsed.items;
+			} catch {
+				return null;
+			}
+		}
+		
+		private writeItemsCache(key: string, items: Entry[]) {
+			try {
+				window.sessionStorage.setItem(key, JSON.stringify({ at: Date.now(), items }));
+			} catch {
+				// 隐私模式 / 配额满：忽略即可
+			}
+		}
+
 
 		private async loadModule() {
 			const module = this.module;
@@ -870,6 +911,8 @@ const iconPaths: Record<string, string> = {
 			</form>`;
 			this.updatePreview();
 			this.updateWordCount();
+			this.updateModeButtons();
+			this.prefetchLivePreview();
 			if (this.liveMode) {
 				// 重渲染后旧实例的 DOM 已失效，直接丢弃，下面重新创建
 				this.livePreview = null;
@@ -889,6 +932,19 @@ const iconPaths: Record<string, string> = {
 			if (this.liveMode) this.rememberEditorMode();
 		}
 
+		/** 编辑器一出现就空闲预取实时预览的代码块，别等用户点「实时」才开始下载。 */
+		private prefetchLivePreview() {
+			if (this.livePreviewModule || this.liveLoading) return;
+			const run = () => {
+				void this.loadLivePreviewModule().catch(() => {
+					// 预取失败无所谓，用户点「实时」时会再试一次
+				});
+			};
+			const ric = window.requestIdleCallback as typeof window.requestIdleCallback | undefined;
+			if (typeof ric === "function") ric(run, { timeout: 4000 });
+			else window.setTimeout(run, 1200);
+		}
+		
 		private rememberEditorMode() {
 			try {
 				window.localStorage.setItem(EDITOR_MODE_KEY, this.liveMode ? "live" : "source");
@@ -901,7 +957,10 @@ const iconPaths: Record<string, string> = {
 			const button = this.querySelector<HTMLButtonElement>("[data-mode-toggle]");
 			if (!button) return;
 			button.classList.toggle("is-active", this.liveMode);
-			button.textContent = this.liveMode ? "源码" : "实时";
+			// 首次加载 CodeMirror 要下几百 KB，按钮先给个「加载中…」，别让人以为点了没反应
+			button.disabled = this.liveLoading;
+			button.classList.toggle("is-loading", this.liveLoading);
+			button.textContent = this.liveLoading ? "加载中…" : this.liveMode ? "源码" : "实时";
 			const label = this.liveMode ? "回到源码编辑" : "实时预览（光标所在行显示源码）";
 			button.title = label;
 			button.setAttribute("aria-label", label);
@@ -928,6 +987,7 @@ const iconPaths: Record<string, string> = {
 				return;
 			}
 			this.liveLoading = true;
+			this.updateModeButtons();
 			// 用「实时编辑器是否已挂载」判断，不能用 liveMode：默认实时时 liveMode 在编辑器创建前就是 true，
 			// 那样会拿空的 liveSource 覆盖正文（实测会清空正文）
 			const original = this.livePreview ? (this.liveDirty ? this.liveLatest : this.liveSource) : area.value;
@@ -963,7 +1023,8 @@ const iconPaths: Record<string, string> = {
 				this.updateModeButtons();
 				this.showImageToast(error instanceof Error ? error.message : "实时预览加载失败。", "error");
 			} finally {
-			this.liveLoading = false;
+				this.liveLoading = false;
+				this.updateModeButtons();
 			}
 		}
 	
@@ -1052,7 +1113,7 @@ const iconPaths: Record<string, string> = {
 				if (!response.ok || !("slug" in result)) throw new Error((result as { error?: string }).error || "保存失败。");
 				this.current = result;
 				this.notice = "已保存，Cloudflare Pages 会自动构建网站。";
-				await this.loadItems();
+				await this.loadItems({ fresh: true });
 			} catch (error) {
 				this.notice = error instanceof Error ? error.message : "保存失败。";
 				if (state) state.textContent = "保存失败";
@@ -1953,7 +2014,7 @@ const iconPaths: Record<string, string> = {
 				if (!response.ok) throw new Error(data.error || "删除失败。");
 				this.current = null;
 				this.notice = "内容已删除。";
-				await this.loadItems();
+				await this.loadItems({ fresh: true });
 			} catch (error) {
 				this.notice = error instanceof Error ? error.message : "删除失败。";
 				this.renderEditor();
