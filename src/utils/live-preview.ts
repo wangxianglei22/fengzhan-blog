@@ -623,6 +623,8 @@ export async function createLivePreview(host: HTMLElement, initial: string, opti
 			history(),
 			drawSelection(),
 			EditorView.lineWrapping,
+			// 实时模式也要有写作提示，否则空文档什么都不显示
+			viewModule.placeholder("从这里开始写正文，支持 Markdown；可直接 Ctrl+V 粘贴图片，或点工具栏 ▧ 插入素材库图片。"),
 			keymap.of([
 				{ key: "Mod-b", run: wrapSelection("**", "**", "加粗文字") },
 				{ key: "Mod-i", run: wrapSelection("*", "*", "斜体文字") },

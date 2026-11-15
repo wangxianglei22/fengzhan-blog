@@ -838,9 +838,9 @@ const iconPaths: Record<string, string> = {
 					<details class="admin-metadata">
 						<summary><span>文章信息</span><small>${isPost ? escapeHtml(item.category || "未分类") : escapeHtml(item.moodLabel || "设置心情")} · ${escapeHtml(item.date || today())}</small><span class="admin-meta-chevron">⌄</span></summary>
 						<div class="admin-form-grid">
-					<label>Slug<input name="slug" value="${escapeHtml(item.slug)}" placeholder="留空自动生成" ${item.sha ? "readonly" : ""} /></label>
+					<label>链接地址（Slug）<input name="slug" value="${escapeHtml(item.slug)}" placeholder="留空就用标题自动生成" ${item.sha ? "readonly" : ""} /><small class="admin-field-hint">就是这篇内容网址末尾的那一段，例如 /posts/<b>我的文章</b>/ 里的「我的文章」。留空会用标题自动生成，保存后不建议再改。</small></label>
 					<label>${isPost ? "发布日期" : "日记日期"}<input name="date" type="date" value="${escapeHtml(item.date || today())}" required /></label>
-					${isPost ? `<label>分类<input name="category" value="${escapeHtml(item.category)}" placeholder="例如：生活" /></label><label>语言<input name="lang" value="${escapeHtml(item.lang)}" placeholder="zh-CN" /></label><label class="admin-field-wide">摘要<input name="description" value="${escapeHtml(item.description)}" placeholder="文章列表中显示的摘要" /></label><label class="admin-field-wide">封面地址<span class="admin-cover-row"><input name="image" value="${escapeHtml(item.image)}" placeholder="/images/cover.jpg 或 https://…" /><button type="button" class="admin-secondary-button" data-image-target="image">上传</button></span></label>` : `<label class="admin-mood-field" data-mood-picker>\u5fc3\u60c5\u8868\u60c5<span class="admin-mood-input"><input name="mood" value="${escapeHtml(item.mood)}" placeholder="\ud83d\ude0a" maxlength="8" /><button type="button" data-format="emoji" aria-label="\u9009\u62e9\u5fc3\u60c5\u8868\u60c5" title="\u9009\u62e9\u5fc3\u60c5\u8868\u60c5">\u263a</button></span><div class="admin-emoji-menu" data-emoji-menu hidden>${renderEmojiMenu()}</div></label><label>心情说明<input name="moodLabel" value="${escapeHtml(item.moodLabel)}" placeholder="今天的心情" /></label><label class="admin-field-wide">摘要<input name="excerpt" value="${escapeHtml(item.excerpt)}" placeholder="日记卡片中显示的摘要" /></label><label class="admin-field-wide">封面地址<span class="admin-cover-row"><input name="cover" value="${escapeHtml(item.cover)}" placeholder="/images/diary.jpg 或 https://…" /><button type="button" class="admin-secondary-button" data-image-target="cover">上传</button></span></label>`}
+					${isPost ? `<label>分类<input name="category" value="${escapeHtml(item.category)}" placeholder="点下面的标签，或直接输入新分类" />${this.renderCategoryChips(item.category)}</label><label>语言<input name="lang" value="${escapeHtml(item.lang)}" placeholder="zh-CN" /></label><label class="admin-field-wide">摘要<input name="description" value="${escapeHtml(item.description)}" placeholder="文章列表中显示的摘要" /></label><label class="admin-field-wide">封面地址<span class="admin-cover-row"><input name="image" value="${escapeHtml(item.image)}" placeholder="/images/cover.jpg 或 https://…" /><button type="button" class="admin-secondary-button" data-image-target="image">上传</button><button type="button" class="admin-secondary-button" data-image-pick="image">素材库</button></span><small class="admin-field-hint">「上传」传一张本地图，「素材库」从已上传的图片里挑；留空则不显示封面。</small></label>` : `<label class="admin-mood-field" data-mood-picker>\u5fc3\u60c5\u8868\u60c5<span class="admin-mood-input"><input name="mood" value="${escapeHtml(item.mood)}" placeholder="\ud83d\ude0a" maxlength="8" /><button type="button" data-format="emoji" aria-label="\u9009\u62e9\u5fc3\u60c5\u8868\u60c5" title="\u9009\u62e9\u5fc3\u60c5\u8868\u60c5">\u263a</button></span><div class="admin-emoji-menu" data-emoji-menu hidden>${renderEmojiMenu()}</div></label><label>心情说明<input name="moodLabel" value="${escapeHtml(item.moodLabel)}" placeholder="今天的心情" /></label><label class="admin-field-wide">摘要<input name="excerpt" value="${escapeHtml(item.excerpt)}" placeholder="日记卡片中显示的摘要" /></label><label class="admin-field-wide">封面地址<span class="admin-cover-row"><input name="cover" value="${escapeHtml(item.cover)}" placeholder="/images/diary.jpg 或 https://…" /><button type="button" class="admin-secondary-button" data-image-target="cover">上传</button><button type="button" class="admin-secondary-button" data-image-pick="cover">素材库</button></span><small class="admin-field-hint">「上传」传一张本地图，「素材库」从已上传的图片里挑；留空则不显示封面。</small></label>`}
 					${isPost ? "" : `<label class="admin-checkbox-field admin-field-wide"><input name="pinned" type="checkbox" ${item.pinned ? "checked" : ""} /><span><strong>置顶到日记页顶部</strong><small>置顶后这篇日记会出现在日记页顶部的「置顶日记」区域，那里一次显示 3 张卡片，可左右切换。</small></span></label>`}
 					<label class="admin-field-wide">标签<input name="tags" value="${escapeHtml(item.tags.join(", "))}" placeholder="多个标签用逗号分隔" /></label>
 					<label class="admin-checkbox-field admin-field-wide"><input name="hidden" type="checkbox" ${item.hidden ? "checked" : ""} /><span><strong>隐藏这篇内容</strong><small>隐藏后不会出现在首页、文章总览、分类、标签或 RSS 中，但原链接仍可访问。</small></span></label>
@@ -1232,7 +1232,7 @@ const iconPaths: Record<string, string> = {
 						<small class="admin-upload-hint">支持 jpg / png / gif / webp / avif，单个文件不超过 20 MiB。图片会提交到仓库的 public/images/uploads/，等下次构建完成后才能访问。</small>
 						<small class="admin-upload-status" data-image-status role="status">${escapeHtml(this.imageStatus)}</small>
 					</div>
-					<footer class="admin-modal-foot"><button class="admin-secondary-button" data-image-action="cancel" type="button">取消</button><button class="admin-primary-button" data-image-action="confirm" type="button">开始上传</button></footer>
+					<footer class="admin-modal-foot"><button class="admin-secondary-button" data-image-action="pick-library" type="button">从素材库选</button><button class="admin-secondary-button" data-image-action="cancel" type="button">取消</button><button class="admin-primary-button" data-image-action="confirm" type="button">开始上传</button></footer>
 				</div>
 			</div>`;
 		}
@@ -1527,6 +1527,85 @@ const iconPaths: Record<string, string> = {
 	}
 
 	// 按记录的光标位置把图片插进正文；预览用本地地址，避免等下次构建。
+	private renderCategoryChips(current: string): string {
+		const categories = Array.from(new Set(this.items.map((item) => (item.category || "").trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right, "zh-Hans-CN"));
+		if (!categories.length) return `<small class="admin-field-hint">还没有已有分类，直接输入一个就会创建。</small>`;
+		const chips = categories.map((value) => `<button class="admin-category-chip${value === current ? " is-active" : ""}" data-category-pick="${escapeHtml(value)}" type="button">${escapeHtml(value)}</button>`).join("");
+		return `<span class="admin-category-chips" data-category-chips>${chips}</span><small class="admin-field-hint">点标签快速填入，也可以直接改成别的分类。</small>`;
+	}
+
+	/** 编辑器里的「从素材库选」：为封面挑图，或往正文插图。 */
+	private async openImagePicker(target: "body" | "image" | "cover") {
+		if (this.busy) return;
+		this.imageTarget = target;
+		if (target === "body") {
+			const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
+			this.imageInsertRange = area ? [area.selectionStart, area.selectionEnd] : null;
+		} else {
+			this.imageInsertRange = null;
+		}
+		this.querySelector("[data-image-picker-root]")?.remove();
+		this.insertAdjacentHTML("beforeend", `<div class="admin-modal-backdrop" data-image-picker-root>
+			<div class="admin-modal admin-modal-wide" role="dialog" aria-modal="true" aria-label="从素材库选择图片">
+				<header class="admin-modal-head"><strong>从素材库选择图片</strong><button class="admin-icon-button" data-image-action="close-picker" type="button" aria-label="关闭">✕</button></header>
+				<div class="admin-modal-body" data-image-picker-body><p class="admin-upload-hint">正在读取素材库…</p></div>
+			</div>
+		</div>`);
+		const body = this.querySelector<HTMLElement>("[data-image-picker-body]");
+		try {
+			const response = await fetch("/api/admin/media", { credentials: "same-origin" });
+			const data = (await response.json()) as { images?: MediaItem[]; error?: string };
+			if (!response.ok) throw new Error(data.error || "素材库读取失败。");
+			const images = Array.isArray(data.images) ? data.images : [];
+			if (!body) return;
+			body.innerHTML = images.length
+				? `<div class="admin-picker-grid">${images.map((item) => `<button class="admin-picker-item" data-image-action="use-media" data-media-url="${escapeHtml(item.url)}" type="button" title="${escapeHtml(item.name)}"><span class="admin-picker-thumb"><img src="${escapeHtml(item.url)}" alt="" loading="lazy" /></span><span class="admin-picker-name">${escapeHtml(item.name)}</span></button>`).join("")}</div>`
+				: `<p class="admin-upload-hint">素材库里还没有图片，先用「上传」传一张。</p>`;
+		} catch (error) {
+			if (body) body.innerHTML = `<p class="admin-upload-hint">${escapeHtml(error instanceof Error ? error.message : "素材库读取失败。")}</p>`;
+		}
+	}
+
+	private closeImagePicker() {
+		this.querySelector("[data-image-picker-root]")?.remove();
+	}
+
+	/** 选中素材库里的图片：封面直接回填地址，正文按光标插入 Markdown。 */
+	private applyPickedImage(url: string) {
+		if (!url) return;
+		const target = this.imageTarget;
+		this.closeImagePicker();
+		if (target === "body") {
+			this.insertImageMarkdown(url);
+			return;
+		}
+		const field = this.querySelector<HTMLInputElement>(target === "cover" ? "#editor-form input[name='cover']" : "#editor-form input[name='image']");
+		if (field) {
+			field.value = url;
+			field.dispatchEvent(new Event("input", { bubbles: true }));
+			this.showImageToast("已填入封面地址，记得保存。", "info");
+		}
+	}
+
+	private insertImageMarkdown(url: string) {
+		const range = this.imageInsertRange;
+		const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
+		const alt = decodeURIComponent(url.split("/").pop() || "图片").replace(/\.[^.]+$/, "") || "图片";
+		if (this.liveMode && this.livePreview) {
+			this.livePreview.replaceSelection(`![${alt}](${url})`);
+			this.showImageToast("图片已插入正文。", "info");
+			return;
+		}
+		if (!area) return;
+		const start = Math.min(range ? range[0] : area.value.length, area.value.length);
+		const end = Math.min(range ? range[1] : area.value.length, area.value.length);
+		area.focus();
+		area.setRangeText(`![${alt}](${url})`, start, end, "end");
+		area.dispatchEvent(new Event("input", { bubbles: true }));
+		this.updatePreview();
+		this.showImageToast("图片已插入正文。", "info");
+	}
+
 	private insertUploadedImage(url: string, file: File, range: [number, number]) {
 		const target = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
 		if (!target) return;
@@ -1654,7 +1733,7 @@ const iconPaths: Record<string, string> = {
 		private async handleClick(event: Event) {
 			const target = event.target;
 			if (!(target instanceof Element)) return;
-			const button = target.closest<HTMLButtonElement>("button[data-action], button[data-kind], button[data-module], button[data-module-action], button[data-upload-action], button[data-image-target], button[data-image-action], button[data-copy], button[data-media-delete], button[data-media-refresh], button[data-media-upload], button[data-audio-upload], button[data-mode-toggle], button[data-format], button[data-emoji], button[data-emoji-group]");
+			const button = target.closest<HTMLButtonElement>("button[data-action], button[data-kind], button[data-module], button[data-module-action], button[data-upload-action], button[data-image-target], button[data-image-action], button[data-copy], button[data-media-delete], button[data-media-refresh], button[data-media-upload], button[data-audio-upload], button[data-mode-toggle], button[data-image-pick], button[data-category-pick], button[data-format], button[data-emoji], button[data-emoji-group]");
 			if (!button || this.busy) return;
 			if (button.dataset.emojiGroup) {
 				const menu = button.closest("[data-emoji-menu]");
@@ -1674,6 +1753,23 @@ const iconPaths: Record<string, string> = {
 			if (button.dataset.modeToggle !== undefined) {
 				await this.toggleLiveMode();
 				return;
+			}
+			if (button.dataset.categoryPick !== undefined) {
+				const field = this.querySelector<HTMLInputElement>("#editor-form input[name='category']");
+				if (field) {
+					field.value = button.dataset.categoryPick || "";
+					field.dispatchEvent(new Event("input", { bubbles: true }));
+				}
+				// 标签高亮跟着走，不用整页重渲染
+				this.querySelectorAll<HTMLElement>("[data-category-pick]").forEach((chip) => {
+					chip.classList.toggle("is-active", chip.dataset.categoryPick === (button.dataset.categoryPick || ""));
+				});
+			return;
+			}
+			if (button.dataset.imagePick) {
+				const target = button.dataset.imagePick === "cover" ? "cover" : "image";
+				void this.openImagePicker(target);
+			return;
 			}
 			if (button.dataset.imageTarget) {
 				const target = button.dataset.imageTarget;
@@ -1714,6 +1810,20 @@ const iconPaths: Record<string, string> = {
 				}
 				if (button.dataset.imageAction === "confirm") {
 					await this.uploadImage();
+					return;
+				}
+				if (button.dataset.imageAction === "close-picker") {
+					this.closeImagePicker();
+					return;
+				}
+				if (button.dataset.imageAction === "use-media") {
+					this.applyPickedImage(button.dataset.mediaUrl || "");
+					return;
+				}
+				if (button.dataset.imageAction === "pick-library") {
+					const target = this.imageTarget;
+					this.closeImageModal();
+					void this.openImagePicker(target);
 					return;
 				}
 			}
@@ -2043,6 +2153,12 @@ const iconPaths: Record<string, string> = {
 	.admin-emoji-panel[hidden] { display: none; }
 	/* 工具栏最右边的表情按钮，面板往左展开，别顶出编辑区 */
 	.admin-emoji-wrap .admin-emoji-menu { right: 0; left: auto; }
+	.admin-category-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .35rem; }
+	.admin-category-chip { padding: .18rem .55rem; border: 1px solid #dce7eb; border-radius: 999px; color: #4a5a63; background: #f7fbfd; font-size: .7rem; cursor: pointer; }
+	.admin-category-chip:hover { border-color: #2f7fbc; color: #2f7fbc; }
+	.admin-category-chip.is-active { border-color: #2f7fbc; color: #fff; background: #2f7fbc; }
+	.admin-dark .admin-category-chip { border-color: #4c5c65; color: #c3d2d8; background: #26323a; }
+	.admin-dark .admin-category-chip.is-active { border-color: #2f7fbc; color: #fff; background: #2f7fbc; }
 	.admin-word-count { margin-left: auto; align-self: center; padding-right: .3rem; color: #8fa2ac; font-size: .72rem; white-space: nowrap; }
 	.admin-emoji-menu[hidden] { display: none; }
 	.admin-emoji-menu button { width: 1.8rem; height: 1.8rem; font-size: .98rem; }
