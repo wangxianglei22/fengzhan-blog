@@ -1,0 +1,112 @@
+---
+import { Icon } from "astro-icon/components";
+import BackHomeLink from "@components/BackHomeLink.astro";
+import MainGridLayout from "../layouts/MainGridLayout.astro";
+import { profileConfig } from "../config";
+---
+
+<MainGridLayout title="页面不存在" description="这个地址没有对应的内容">
+	<div class="notfound-page">
+		<BackHomeLink />
+		<section class="notfound-card" aria-labelledby="notfound-title">
+			<div class="notfound-mark" aria-hidden="true">
+				<Icon name="material-symbols:explore-off-rounded" class="notfound-icon" />
+			</div>
+			<p class="notfound-code">404</p>
+			<h1 id="notfound-title" class="notfound-title">这里什么都没有</h1>
+			<p class="notfound-text">
+				这个地址没有对应的内容，可能是链接写错了，或者那篇文章已经被删掉了。
+				<br />
+				可以回首页看看，或者从下面的入口继续逛。
+			</p>
+			<nav class="notfound-links" aria-label="常用入口">
+				<a href="/" class="notfound-link is-primary">回首页</a>
+				<a href="/archive/" class="notfound-link">文章总览</a>
+				<a href="/diary/" class="notfound-link">日记</a>
+				<a href="/friends/" class="notfound-link">常用网站</a>
+			</nav>
+			<p class="notfound-sign">— {profileConfig.name}</p>
+		</section>
+	</div>
+</MainGridLayout>
+
+<style is:global>
+	.notfound-page {
+		display: grid;
+		gap: 1rem;
+		padding-block: 1rem 2.5rem;
+	}
+	.notfound-card {
+		display: grid;
+		justify-items: center;
+		gap: 0.85rem;
+		padding: clamp(2rem, 6vw, 4.5rem) clamp(1.25rem, 4vw, 3rem);
+		border: 1px solid color-mix(in srgb, var(--deep-text) 10%, transparent);
+		border-radius: 1.35rem;
+		background: var(--card-bg);
+		text-align: center;
+	}
+	.notfound-mark {
+		display: grid;
+		place-items: center;
+		width: 4rem;
+		height: 4rem;
+		border-radius: 50%;
+		background: color-mix(in srgb, var(--primary) 12%, transparent);
+		color: var(--primary);
+	}
+	.notfound-icon {
+		width: 2rem;
+		height: 2rem;
+	}
+	.notfound-code {
+		margin: 0;
+		font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+		font-size: 0.82rem;
+		letter-spacing: 0.32em;
+		color: color-mix(in srgb, var(--deep-text) 45%, transparent);
+	}
+	.notfound-title {
+		margin: 0;
+		font-size: clamp(1.35rem, 2.6vw, 1.9rem);
+		font-weight: 800;
+		color: var(--deep-text);
+	}
+	.notfound-text {
+		margin: 0;
+		max-width: 34rem;
+		font-size: 0.9rem;
+		line-height: 1.85;
+		color: color-mix(in srgb, var(--deep-text) 72%, transparent);
+	}
+	.notfound-links {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 0.5rem;
+		margin-top: 0.35rem;
+	}
+	.notfound-link {
+		padding: 0.4rem 0.95rem;
+		border: 1px solid color-mix(in srgb, var(--deep-text) 14%, transparent);
+		border-radius: 999px;
+		font-size: 0.8rem;
+		color: color-mix(in srgb, var(--deep-text) 82%, transparent);
+		text-decoration: none;
+		transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+	}
+	.notfound-link:hover {
+		color: var(--primary);
+		border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+	}
+	.notfound-link.is-primary {
+		color: white;
+		background: var(--primary);
+		border-color: var(--primary);
+	}
+	.notfound-sign {
+		margin: 0.35rem 0 0;
+		font-size: 0.76rem;
+		color: color-mix(in srgb, var(--deep-text) 40%, transparent);
+	}
+</style>
