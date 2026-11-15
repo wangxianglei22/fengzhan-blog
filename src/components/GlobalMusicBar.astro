@@ -62,7 +62,9 @@ const tracks = parseMusic(musicSource);
 		};
 
 		private handleOutsideClick = (event: MouseEvent) => {
-			if (!this.expanded || !this.bar.contains(event.target as Node)) this.collapse();
+			// 只有展开时才有「点外面收起」这回事；播放态不能因为点了页面其它地方被清掉
+			if (!this.expanded) return;
+			if (!this.bar.contains(event.target as Node)) this.collapse();
 		};
 
 		private handlePlay = () => {
@@ -111,7 +113,8 @@ const tracks = parseMusic(musicSource);
 		collapse() {
 			this.clearTimer();
 			this.expanded = false;
-			this.bar.classList.remove("is-expanded", "is-playing");
+			// is-playing 由 audio 的 play/pause 驱动，收起面板时不能连带清掉（否则切页/点别处后小球不显示播放中）
+			this.bar.classList.remove("is-expanded");
 			this.ball?.setAttribute("aria-expanded", "false");
 		}
 	}

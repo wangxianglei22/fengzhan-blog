@@ -70,6 +70,8 @@ const search = async (keyword: string, isDesktop: boolean): Promise<void> => {
 		return;
 	}
 	if (!initialized) {
+		// 搜索索引按需加载：第一次搜索时触发，加载完成的 pagefindready 会重新跑这次查询
+		(window as Window & { __loadPagefind?: () => Promise<void> }).__loadPagefind?.();
 		return;
 	}
 
@@ -130,13 +132,9 @@ onMount(() => {
 			initializeSearch(); // Initialize with pagefindLoaded as false
 		});
 
-		// Fallback in case events are not caught or pagefind is already loaded by the time this script runs
-		setTimeout(() => {
-			if (!initialized) {
-				console.log("Fallback: Initializing search after timeout.");
-				initializeSearch();
-			}
-		}, 2000); // Adjust timeout as needed
+		// 不再做「2 秒后自动初始化」的兜底：索引改为按需加载后，
+		// 若提前把 initialized 置真，首次搜索会走到「pagefind 不可用」分支。
+		// 现在由 search() 里的 __loadPagefind() 与 pagefindready 事件负责衔接。
 	}
 
 	// 小屏点开搜索面板后把窗口拉大时，桌面端内嵌的搜索框会隐藏（lg:hidden），

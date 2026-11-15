@@ -280,7 +280,8 @@ const iconPaths: Record<string, string> = {
 			try {
 				// 会话校验和两个列表并行发起：本机到 Cloudflare 每趟往返都可能卡 1~2 秒，
 				// 串着等就是双倍等待；未登录时这些请求只会拿到 401，不影响安全。
-				const warmup = this.warmUpItems();
+				// 预热并发起（不看返回值，loadItems 内部会 await 同一个 warmupPromise）
+				void this.warmUpItems();
 				const response = await fetch("/api/admin/session", { credentials: "same-origin" });
 				const data = await response.json() as { authenticated?: boolean };
 				if (data.authenticated) {
