@@ -97,6 +97,7 @@ import "@fontsource/roboto/700.css";
 		type ModuleField,
 		type ModuleRecord,
 	} from "../../utils/admin-module-forms";
+import type { LivePreviewHandle } from "../../utils/live-preview";
 
 	type CollectionName = "posts" | "diary";
 	type Entry = {
@@ -131,6 +132,9 @@ const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (
 	}[character] || character));
 	const tagsFromInput = (value: string) => value.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean);
 	type MediaItem = { name: string; path: string; url: string; size: number };
+
+// 编辑模式偏好：默认进编辑器就开实时预览，用户手动切回源码后记住选择
+const EDITOR_MODE_KEY = "fengzhan-editor-mode";
 
 const formatBytes = (bytes: number) => {
 	if (!bytes) return "0 KB";
@@ -169,7 +173,21 @@ const iconPaths: Record<string, string> = {
 	media: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 17 5-4 4 3 3-2 4 3"/>',
 	};
 	const icon = (name: string) => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[name]}</svg>`;
-	const moodEmojis = ["😀", "😊", "😌", "🤍", "🥰", "😎", "🤔", "😴", "🥳", "😭", "😤", "😮", "🤗", "🙃", "🌈", "✨", "🌙", "☀️", "🍀", "🎧"];
+	/** 表情面板的分组数据：心情 / 手势 / 自然 / 生活 / 符号。 */
+	const EMOJI_GROUPS: { label: string; items: string[] }[] = [
+		{ label: "心情", items: ["😀", "😄", "😊", "🙂", "😌", "😍", "🥰", "😎", "🤔", "😴", "🥳", "😭", "😤", "😮", "🤗", "🙃", "😅", "😇", "🥺", "😬", "😑", "😪", "🤯", "😱", "🤩", "😏", "🫠", "🥹"] },
+		{ label: "手势", items: ["👍", "👎", "👏", "🙏", "🤝", "💪", "✌️", "🤞", "👌", "👋", "🤙", "✍️", "🖐️", "🙌", "🤲", "🫶", "🫰", "👀", "👂", "🧠", "🫡", "🤷", "💁", "🙇", "🏃", "🚶", "🧘", "🫂"] },
+		{ label: "自然", items: ["🌈", "✨", "🌙", "☀️", "⛅", "🌧️", "⛄", "🌸", "🌿", "🍀", "🌻", "🌊", "🔥", "❄️", "⭐", "🌟", "🍂", "🌾", "🐚", "🦋", "🐈", "🐕", "🐟", "🕊️", "🌷", "🍁", "🌱", "☁️"] },
+		{ label: "生活", items: ["🎧", "🎵", "🎸", "📚", "✏️", "☕", "🍵", "🍜", "🍰", "🎮", "🎬", "📷", "💻", "⌨️", "🖊️", "📝", "🗓️", "🌏", "🚀", "🎁", "🎈", "🧩", "🛋️", "🍃", "🥐", "🧋", "🎯", "📦"] },
+		{ label: "符号", items: ["❤️", "💔", "✅", "❌", "⭕", "❗", "❓", "⚡", "💡", "🔔", "📌", "🔖", "🏷️", "♻️", "➕", "➖", "♾️", "🆗", "💯", "🔗", "⭐", "〰️", "⚙️", "🔒"] },
+	];
+
+	/** 生成表情面板：上面是分组标签，下面是分组内容。 */
+	function renderEmojiMenu(): string {
+		const tabs = EMOJI_GROUPS.map((group, index) => `<button type="button" class="admin-emoji-tab${index === 0 ? " is-active" : ""}" data-emoji-group="${group.label}">${group.label}</button>`).join("");
+		const panels = EMOJI_GROUPS.map((group, index) => `<div class="admin-emoji-panel" data-emoji-panel="${group.label}"${index === 0 ? "" : " hidden"}>${group.items.map((emoji) => `<button type="button" data-emoji="${emoji}" aria-label="${emoji}">${emoji}</button>`).join("")}</div>`).join("");
+		return `<div class="admin-emoji-tabs">${tabs}</div>${panels}`;
+	}
 
 	function emptyEntry(collection: CollectionName): Entry {
 		return {
@@ -246,6 +264,13 @@ const iconPaths: Record<string, string> = {
 			this.addEventListener("dragover", this.handleDragOver);
 			this.addEventListener("drop", this.handleDrop);
 			this.addEventListener("change", this.handleChange);
+			this.addEventListener("keydown", this.handleKeydown);
+			// 默认实时预览；只有用户主动切回「源码」才记住为 source
+			try {
+				this.liveMode = window.localStorage.getItem(EDITOR_MODE_KEY) !== "source";
+			} catch {
+				this.liveMode = true;
+			}
 			void this.checkSession();
 		}
 
@@ -815,7 +840,7 @@ const iconPaths: Record<string, string> = {
 						<div class="admin-form-grid">
 					<label>Slug<input name="slug" value="${escapeHtml(item.slug)}" placeholder="留空自动生成" ${item.sha ? "readonly" : ""} /></label>
 					<label>${isPost ? "发布日期" : "日记日期"}<input name="date" type="date" value="${escapeHtml(item.date || today())}" required /></label>
-					${isPost ? `<label>分类<input name="category" value="${escapeHtml(item.category)}" placeholder="例如：生活" /></label><label>语言<input name="lang" value="${escapeHtml(item.lang)}" placeholder="zh-CN" /></label><label class="admin-field-wide">摘要<input name="description" value="${escapeHtml(item.description)}" placeholder="文章列表中显示的摘要" /></label><label class="admin-field-wide">封面地址<span class="admin-cover-row"><input name="image" value="${escapeHtml(item.image)}" placeholder="/images/cover.jpg 或 https://…" /><button type="button" class="admin-secondary-button" data-image-target="image">上传</button></span></label>` : `<label class="admin-mood-field" data-mood-picker>\u5fc3\u60c5\u8868\u60c5<span class="admin-mood-input"><input name="mood" value="${escapeHtml(item.mood)}" placeholder="\ud83d\ude0a" maxlength="8" /><button type="button" data-format="emoji" aria-label="\u9009\u62e9\u5fc3\u60c5\u8868\u60c5" title="\u9009\u62e9\u5fc3\u60c5\u8868\u60c5">\u263a</button></span><div class="admin-emoji-menu" data-emoji-menu hidden>${moodEmojis.map((emoji) => `<button type="button" data-emoji="${emoji}" aria-label="${emoji}">${emoji}</button>`).join("")}</div></label><label>心情说明<input name="moodLabel" value="${escapeHtml(item.moodLabel)}" placeholder="今天的心情" /></label><label class="admin-field-wide">摘要<input name="excerpt" value="${escapeHtml(item.excerpt)}" placeholder="日记卡片中显示的摘要" /></label><label class="admin-field-wide">封面地址<span class="admin-cover-row"><input name="cover" value="${escapeHtml(item.cover)}" placeholder="/images/diary.jpg 或 https://…" /><button type="button" class="admin-secondary-button" data-image-target="cover">上传</button></span></label>`}
+					${isPost ? `<label>分类<input name="category" value="${escapeHtml(item.category)}" placeholder="例如：生活" /></label><label>语言<input name="lang" value="${escapeHtml(item.lang)}" placeholder="zh-CN" /></label><label class="admin-field-wide">摘要<input name="description" value="${escapeHtml(item.description)}" placeholder="文章列表中显示的摘要" /></label><label class="admin-field-wide">封面地址<span class="admin-cover-row"><input name="image" value="${escapeHtml(item.image)}" placeholder="/images/cover.jpg 或 https://…" /><button type="button" class="admin-secondary-button" data-image-target="image">上传</button></span></label>` : `<label class="admin-mood-field" data-mood-picker>\u5fc3\u60c5\u8868\u60c5<span class="admin-mood-input"><input name="mood" value="${escapeHtml(item.mood)}" placeholder="\ud83d\ude0a" maxlength="8" /><button type="button" data-format="emoji" aria-label="\u9009\u62e9\u5fc3\u60c5\u8868\u60c5" title="\u9009\u62e9\u5fc3\u60c5\u8868\u60c5">\u263a</button></span><div class="admin-emoji-menu" data-emoji-menu hidden>${renderEmojiMenu()}</div></label><label>心情说明<input name="moodLabel" value="${escapeHtml(item.moodLabel)}" placeholder="今天的心情" /></label><label class="admin-field-wide">摘要<input name="excerpt" value="${escapeHtml(item.excerpt)}" placeholder="日记卡片中显示的摘要" /></label><label class="admin-field-wide">封面地址<span class="admin-cover-row"><input name="cover" value="${escapeHtml(item.cover)}" placeholder="/images/diary.jpg 或 https://…" /><button type="button" class="admin-secondary-button" data-image-target="cover">上传</button></span></label>`}
 					${isPost ? "" : `<label class="admin-checkbox-field admin-field-wide"><input name="pinned" type="checkbox" ${item.pinned ? "checked" : ""} /><span><strong>置顶到日记页顶部</strong><small>置顶后这篇日记会出现在日记页顶部的「置顶日记」区域，那里一次显示 3 张卡片，可左右切换。</small></span></label>`}
 					<label class="admin-field-wide">标签<input name="tags" value="${escapeHtml(item.tags.join(", "))}" placeholder="多个标签用逗号分隔" /></label>
 					<label class="admin-checkbox-field admin-field-wide"><input name="hidden" type="checkbox" ${item.hidden ? "checked" : ""} /><span><strong>隐藏这篇内容</strong><small>隐藏后不会出现在首页、文章总览、分类、标签或 RSS 中，但原链接仍可访问。</small></span></label>
@@ -831,20 +856,151 @@ const iconPaths: Record<string, string> = {
 						<button type="button" data-format="link" title="插入链接" aria-label="插入链接">${icon("link")}</button>
 						<button type="button" data-format="code" title="\u4ee3\u7801" aria-label="\u4ee3\u7801">&lt;/&gt;</button>
 						<button type="button" data-image-target="body" title="插入本地图片" aria-label="插入本地图片">▧</button>
-						<button type="button" data-preview-toggle title="切换实时预览" aria-label="切换实时预览">◧</button>
+						<button type="button" data-mode-toggle title="源码 / 实时预览切换" aria-label="切换编辑模式">实时</button>
 						<button type="button" data-format="table" title="\u8868\u683c" aria-label="\u8868\u683c">\u25a6</button>
 						<button type="button" data-format="rule" title="\u5206\u5272\u7ebf" aria-label="\u5206\u5272\u7ebf">\u2014</button>
-						<div class="admin-emoji-wrap"><button type="button" data-format="emoji" title="\u63d2\u5165\u8868\u60c5" aria-label="\u63d2\u5165\u8868\u60c5">\u263a</button><div class="admin-emoji-menu" data-emoji-menu hidden>${moodEmojis.map((emoji) => `<button type="button" data-emoji="${emoji}" aria-label="${emoji}">${emoji}</button>`).join("")}</div></div>
+						<span class="admin-word-count" data-word-count></span>
+						<div class="admin-emoji-wrap"><button type="button" data-format="emoji" title="\u63d2\u5165\u8868\u60c5" aria-label="\u63d2\u5165\u8868\u60c5">\u263a</button><div class="admin-emoji-menu" data-emoji-menu hidden>${renderEmojiMenu()}</div></div>
 					</div>
 					<div class="admin-writing-split">
 						<textarea class="admin-body-input" name="body" placeholder="从这里开始写正文，支持 Markdown…，也可以直接 Ctrl+V 粘贴图片" aria-label="正文（Markdown）" spellcheck="false">${escapeHtml(item.body)}</textarea>
-						<aside class="admin-preview${this.previewCollapsed ? " is-collapsed" : ""}" data-preview aria-label="正文实时预览"></aside>
+						<div class="admin-live-host" data-live-host hidden></div>
 					</div>
 				</div>
 			</form>`;
 			this.updatePreview();
+			this.updateWordCount();
+			if (this.liveMode) {
+				// 重渲染后旧实例的 DOM 已失效，直接丢弃，下面重新创建
+				this.livePreview = null;
+				void this.enterLiveMode();
+			}
 		}
 
+		/** 源码 ↔ 实时预览（CodeMirror 6 装饰式）切换。 */
+		private async toggleLiveMode() {
+			if (this.busy || this.liveLoading) return;
+			if (this.liveMode) {
+				this.exitLiveMode();
+				this.rememberEditorMode();
+				return;
+			}
+			await this.enterLiveMode();
+			if (this.liveMode) this.rememberEditorMode();
+		}
+
+		private rememberEditorMode() {
+			try {
+				window.localStorage.setItem(EDITOR_MODE_KEY, this.liveMode ? "live" : "source");
+			} catch {
+				// 隐私模式下 localStorage 可能不可用，忽略即可
+			}
+		}
+	
+		private updateModeButtons() {
+			const button = this.querySelector<HTMLButtonElement>("[data-mode-toggle]");
+			if (!button) return;
+			button.classList.toggle("is-active", this.liveMode);
+			button.textContent = this.liveMode ? "源码" : "实时";
+			const label = this.liveMode ? "回到源码编辑" : "实时预览（光标所在行显示源码）";
+			button.title = label;
+			button.setAttribute("aria-label", label);
+		}
+	
+		/** 懒加载实时预览模块：CodeMirror 只在第一次切到实时模式时才下载。 */
+		private async loadLivePreviewModule() {
+			if (!this.livePreviewModule) {
+				this.livePreviewModule = await import("../../utils/live-preview");
+			}
+			return this.livePreviewModule;
+		}
+	
+		private async enterLiveMode() {
+			const host = this.querySelector<HTMLElement>("[data-live-host]");
+			const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
+			const split = this.querySelector<HTMLElement>(".admin-writing-split");
+			if (!host || !area || !split) return;
+			if (this.livePreview) {
+				split.classList.add("is-live");
+				host.hidden = false;
+				this.liveMode = true;
+				this.updateModeButtons();
+				return;
+			}
+			this.liveLoading = true;
+			// 用「实时编辑器是否已挂载」判断，不能用 liveMode：默认实时时 liveMode 在编辑器创建前就是 true，
+			// 那样会拿空的 liveSource 覆盖正文（实测会清空正文）
+			const original = this.livePreview ? (this.liveDirty ? this.liveLatest : this.liveSource) : area.value;
+			area.value = original;
+			this.liveSource = original;
+			this.liveDirty = false;
+			try {
+				const { createLivePreview } = await this.loadLivePreviewModule();
+				host.hidden = false;
+				host.innerHTML = "";
+				this.livePreview = await createLivePreview(host, original, {
+					dark: document.documentElement.classList.contains("admin-dark"),
+					onChange: (value) => {
+						this.liveDirty = true;
+						this.liveLatest = value;
+						// 正文仍由隐藏的 textarea 承载，保存逻辑一行都不用改
+						area.value = value;
+						this.updateWordCount();
+					},
+					onImage: (file) => this.uploadForLive(file),
+					onNotice: (message, tone) => this.showImageToast(message, tone),
+				});
+				this.liveMode = true;
+				split.classList.add("is-live");
+				this.updateModeButtons();
+			} catch (error) {
+				this.livePreview?.destroy();
+				this.livePreview = null;
+				host.hidden = true;
+				host.innerHTML = "";
+				this.liveMode = false;
+				split.classList.remove("is-live");
+				this.updateModeButtons();
+				this.showImageToast(error instanceof Error ? error.message : "实时预览加载失败。", "error");
+			} finally {
+			this.liveLoading = false;
+			}
+		}
+	
+		private exitLiveMode() {
+			const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
+			const split = this.querySelector<HTMLElement>(".admin-writing-split");
+			const host = this.querySelector<HTMLElement>("[data-live-host]");
+			if (this.livePreview && area) {
+				// 没编辑过就还原原文，避免编辑器对 Markdown 做规范化后产生无谓 diff
+				area.value = this.liveDirty ? this.liveLatest || this.livePreview.getValue() : this.liveSource;
+				area.dispatchEvent(new Event("input", { bubbles: true }));
+			}
+			this.livePreview?.destroy();
+			this.livePreview = null;
+			this.liveMode = false;
+			this.liveDirty = false;
+			if (host) {
+				host.hidden = true;
+				host.innerHTML = "";
+			}
+			split?.classList.remove("is-live");
+			this.updateModeButtons();
+		}
+	
+		/** 实时预览里的图片：走同一个上传接口，返回可直接引用的地址。 */
+		private async uploadForLive(file: File): Promise<string> {
+			if (!file.type.startsWith("image/")) throw new Error("只能插入图片文件。");
+			if (file.size > 20 * 1024 * 1024) throw new Error("图片超过 20 MiB，请压缩后再传。");
+			const form = new FormData();
+			const extension = file.type === "image/jpeg" ? ".jpg" : `.${file.type.split("/")[1] || "png"}`;
+			form.append("file", new File([file], `live-${Date.now()}${extension}`, { type: file.type }));
+			const response = await fetch("/api/admin/images", { method: "POST", credentials: "same-origin", body: form });
+			const data = (await response.json().catch(() => ({}))) as { url?: string; message?: string };
+			if (!response.ok || !data.url) throw new Error(data.message || "图片上传失败。");
+			return data.url;
+		}
+	
 		private async handleSubmit(event: Event) {
 			event.preventDefault();
 			const form = event.target as HTMLFormElement;
@@ -910,7 +1066,45 @@ const iconPaths: Record<string, string> = {
 			}
 		}
 
-		private handleInput(event: Event) {
+		/** 源码模式下的 Markdown 快捷键：Ctrl/⌘ + B / I / K。 */
+	private handleKeydown(event: KeyboardEvent) {
+		if (!(event.target instanceof HTMLTextAreaElement)) return;
+		if (!event.target.classList.contains("admin-body-input")) return;
+		if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+		const pairs: Record<string, [string, string, string]> = {
+			b: ["**", "**", "加粗文字"],
+			i: ["*", "*", "斜体文字"],
+			k: ["[", "](https://)", "链接文字"],
+		};
+		const pair = pairs[event.key.toLowerCase()];
+		if (!pair || event.isComposing) return;
+		event.preventDefault();
+		const area = event.target;
+		const start = area.selectionStart;
+		const end = area.selectionEnd;
+		const selected = area.value.slice(start, end) || pair[2];
+		area.value = `${area.value.slice(0, start)}${pair[0]}${selected}${pair[1]}${area.value.slice(end)}`;
+		area.focus();
+		area.setSelectionRange(start + pair[0].length, start + pair[0].length + selected.length);
+		area.dispatchEvent(new Event("input", { bubbles: true }));
+	}
+
+	/** 工具栏右侧的字数 / 行数统计。 */
+	private updateWordCount() {
+		const counter = this.querySelector<HTMLElement>("[data-word-count]");
+		if (!counter) return;
+		const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
+		const text = area?.value ?? "";
+		if (!text.trim()) {
+			counter.textContent = "";
+			return;
+		}
+		const chars = text.replace(/\s/g, "").length;
+		const lines = text.split("\n").length;
+		counter.textContent = `${chars} 字 · ${lines} 行`;
+	}
+
+	private handleInput(event: Event) {
 			if (!(event.target instanceof Element)) return;
 			const recordInput = event.target.closest<HTMLInputElement | HTMLTextAreaElement>("[data-record-index][data-record-key]");
 			if (recordInput) {
@@ -1127,15 +1321,22 @@ const iconPaths: Record<string, string> = {
 		}
 
 		private previewTimer = 0;
-		// 宽屏下预览默认常显，用 is-collapsed 记住用户的手动收起。
-		private previewCollapsed = false;
 		// 同一张图拖入两次时复用已上传的地址，避免重复占仓库体积。
 		private uploadedFiles = new Map<string, string>();
 	// 刚上传的图片还没随仓库构建上线，先用本地 object URL 让预览立即可见。
 	private uploadedImages = new Map<string, string>();
+	private liveMode = false;
+	private liveDirty = false;
+	private liveLoading = false;
+	private liveSource = "";
+	private liveLatest = "";
+	private livePreviewModule: typeof import("../../utils/live-preview") | null = null;
+	private livePreview: LivePreviewHandle | null = null;
 
 	private schedulePreview() {
 		window.clearTimeout(this.previewTimer);
+		// 字数统计跟着输入实时走，不用等预览（预览面板已经去掉，这里只是复用同一个防抖）
+		this.updateWordCount();
 		this.previewTimer = window.setTimeout(() => this.updatePreview(), 120);
 	}
 
@@ -1376,30 +1577,42 @@ const iconPaths: Record<string, string> = {
 		void this.uploadInlineImage(file);
 	};
 
-	private insertMarkdown(format: string) {
-			const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
-			if (!area) return;
-			const start = area.selectionStart;
-			const end = area.selectionEnd;
-			const selected = area.value.slice(start, end);
+	/** 工具栏片段：实时模式与源码模式共用同一套模板。 */
+	private markdownSnippet(format: string, selected: string): string {
 			const snippets: Record<string, string> = {
-				heading: `## ${selected || "标题"}`,
+				heading: `## ${selected || "标题"}` ,
 				bold: `**${selected || "加粗文字"}**`,
 				italic: `*${selected || "斜体文字"}*`,
 				quote: `> ${selected || "引用内容"}`,
 				list: `- ${selected || "列表项"}`,
 				link: `[${selected || "链接文字"}](https://)`,
-				code: `\`\`\`\n${selected || "const hello = \"world\";"}\n\`\`\``,
+				code: "```" + String.fromCharCode(10) + (selected || 'const hello = "world";') + String.fromCharCode(10) + "```",
 				image: `![${selected || "图片说明"}](/images/example.jpg)`,
-				table: `| 表头 | 表头 |\n| --- | --- |\n| ${selected || "内容"} | 内容 |`,
-				rule: "\n---\n",
+				table: `| 表头 | 表头 |` + String.fromCharCode(10) + `| --- | --- |` + String.fromCharCode(10) + `| ${selected || "内容"} | 内容 |`,
+				rule: String.fromCharCode(10) + "---" + String.fromCharCode(10),
 			};
-			if (!snippets[format]) return;
-			area.setRangeText(snippets[format], start, end, "end");
+			return snippets[format] ?? "";
+	}
+	
+	private insertMarkdown(format: string) {
+			// 实时预览时正文在 CodeMirror 里，工具栏要写到那边的选区
+			if (this.liveMode && this.livePreview) {
+				const snippet = this.markdownSnippet(format, this.livePreview.getSelectionText());
+				if (!snippet) return;
+				this.livePreview.replaceSelection(snippet);
+				return;
+			}
+			const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
+			if (!area) return;
+			const start = area.selectionStart;
+			const end = area.selectionEnd;
+			const snippet = this.markdownSnippet(format, area.value.slice(start, end));
+			if (!snippet) return;
+			area.setRangeText(snippet, start, end, "end");
 			area.focus();
 			area.dispatchEvent(new Event("input", { bubbles: true }));
-		}
-
+	}
+	
 		private toggleEmojiMenu(button: HTMLButtonElement) {
 			// 心情选择器的触发按钮在 .admin-mood-input 里、菜单是它的兄弟节点，
 			// 只查 parentElement 永远找不到菜单（心情表情打不开的根因），
@@ -1426,7 +1639,11 @@ const iconPaths: Record<string, string> = {
 			}
 			const area = this.querySelector<HTMLTextAreaElement>(".admin-body-input");
 			if (!area) return;
-			area.setRangeText(value, area.selectionStart, area.selectionEnd, "end");
+			if (this.liveMode && this.livePreview) {
+				this.livePreview.replaceSelection(value);
+			} else {
+				area.setRangeText(value, area.selectionStart, area.selectionEnd, "end");
+			}
 			area.focus();
 			area.dispatchEvent(new Event("input", { bubbles: true }));
 			// 收起的是「被点的那一组」菜单，不能一刀切收第一个（会把另一个菜单留着）
@@ -1437,24 +1654,25 @@ const iconPaths: Record<string, string> = {
 		private async handleClick(event: Event) {
 			const target = event.target;
 			if (!(target instanceof Element)) return;
-			const button = target.closest<HTMLButtonElement>("button[data-action], button[data-kind], button[data-module], button[data-module-action], button[data-upload-action], button[data-image-target], button[data-image-action], button[data-copy], button[data-media-delete], button[data-media-refresh], button[data-media-upload], button[data-audio-upload], button[data-preview-toggle], button[data-format], button[data-emoji]");
+			const button = target.closest<HTMLButtonElement>("button[data-action], button[data-kind], button[data-module], button[data-module-action], button[data-upload-action], button[data-image-target], button[data-image-action], button[data-copy], button[data-media-delete], button[data-media-refresh], button[data-media-upload], button[data-audio-upload], button[data-mode-toggle], button[data-format], button[data-emoji], button[data-emoji-group]");
 			if (!button || this.busy) return;
+			if (button.dataset.emojiGroup) {
+				const menu = button.closest("[data-emoji-menu]");
+				const label = button.dataset.emojiGroup || "";
+				menu?.querySelectorAll<HTMLElement>("[data-emoji-group]").forEach((tab) => {
+					tab.classList.toggle("is-active", tab.dataset.emojiGroup === label);
+				});
+				menu?.querySelectorAll<HTMLElement>("[data-emoji-panel]").forEach((panel) => {
+					panel.hidden = panel.dataset.emojiPanel !== label;
+				});
+				return;
+			}
 			if (button.dataset.emoji) {
 				this.chooseEmoji(button.dataset.emoji, button);
 				return;
 			}
-			if (button.dataset.previewToggle !== undefined) {
-				const preview = this.querySelector<HTMLElement>(".admin-preview");
-				if (preview) {
-					const wide = window.matchMedia("(min-width: 1280px)").matches;
-					const className = wide ? "is-collapsed" : "is-open";
-					preview.classList.toggle(className);
-					const hidden = wide
-						? preview.classList.contains("is-collapsed")
-						: !preview.classList.contains("is-open");
-					this.previewCollapsed = hidden;
-					button.classList.toggle("is-active", !hidden);
-				}
+			if (button.dataset.modeToggle !== undefined) {
+				await this.toggleLiveMode();
 				return;
 			}
 			if (button.dataset.imageTarget) {
@@ -1763,42 +1981,11 @@ const iconPaths: Record<string, string> = {
 	.admin-editor-topbar .admin-primary-button:hover { background: #4c9bd6; }
 	.admin-icon-button { width: 2.35rem; padding: 0; }
 	.admin-icon-button svg { width: 1.1rem; height: 1.1rem; }
-	.admin-writing-split { display: grid; gap: 1.4rem; }
-	.admin-preview { display: none; padding: 1.5rem 1.35rem; border: 1px solid #e6edf1; border-radius: 0.9rem; color: #2f3a41; background: #fbfdfe; font-size: 0.92rem; line-height: 1.85; overflow-wrap: anywhere; }
-	.admin-preview.is-open { display: block; }
+	.admin-writing-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.4rem; }
 	/* 宽屏默认常显，这里用更高优先级让 ◧ 真正能收起 */
-	.admin-preview.is-collapsed { display: none; }
-	.admin-preview > :first-child { margin-top: 0; }
-	.admin-preview h1, .admin-preview h2, .admin-preview h3, .admin-preview h4 { margin: 1.35em 0 0.5em; font-weight: 700; line-height: 1.35; }
-	.admin-preview h1 { font-size: 1.34rem; }
-	.admin-preview h2 { font-size: 1.18rem; }
-	.admin-preview h3 { font-size: 1.04rem; }
-	.admin-preview p { margin: 0.8em 0; }
-	.admin-preview img { display: block; max-width: 100%; height: auto; margin: 1em 0; border-radius: 0.6rem; }
-	.admin-preview ul, .admin-preview ol { margin: 0.8em 0; padding-left: 1.4em; }
-	.admin-preview li { margin: 0.25em 0; }
-	.admin-preview blockquote { margin: 0.9em 0; padding: 0.1em 0 0.1em 1em; border-left: 3px solid #cfe0ec; color: #5b6b74; }
-	.admin-preview code { padding: 0.12em 0.35em; border-radius: 0.3rem; background: #eef4f8; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.86em; }
-	.admin-preview pre { margin: 1em 0; padding: 0.9rem 1rem; border-radius: 0.7rem; background: #eef4f8; overflow-x: auto; }
-	.admin-preview pre code { padding: 0; background: transparent; }
-	.admin-preview a { color: #2f7fbc; text-decoration: underline; }
-	.admin-preview hr { margin: 1.4em 0; border: 0; border-top: 1px solid #e2ebf0; }
-	.admin-preview-empty { color: #94a4ac; font-size: 0.86rem; }
-	@media (min-width: 1280px) {
-		.admin-writing-split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-		/* 预览收起后编辑区铺满整行，别留半边空白 */
-		.admin-writing-split:has(> .admin-preview.is-collapsed) { grid-template-columns: minmax(0, 1fr); }
-		.admin-preview { display: block; position: sticky; top: 1rem; align-self: start; max-height: calc(100vh - 2rem); overflow-y: auto; }
-	}
 	.admin-image-toast { position: fixed; left: 50%; bottom: 1.6rem; z-index: 95; padding: 0.6rem 0.95rem; border-radius: 0.6rem; color: #fff; background: #2f7fbc; box-shadow: 0 0.5rem 1.5rem #0b223026; font-size: 0.82rem; transform: translateX(-50%); }
 	.admin-image-toast[data-tone="error"] { background: #c0504d; }
 	.admin-image-toast[hidden] { display: none; }
-	.admin-dark .admin-preview { border-color: #40505a; color: #dbe6ea; background: #222c33; }
-	.admin-dark .admin-preview code, .admin-dark .admin-preview pre { background: #2d3941; }
-	.admin-dark .admin-preview blockquote { border-left-color: #4c5c65; color: #a8b8c0; }
-	.admin-dark .admin-preview a { color: #8fbde8; }
-	.admin-dark .admin-preview hr { border-top-color: #3b4a53; }
-	.admin-dark .admin-preview-empty { color: #829198; }
 	.admin-dark .admin-image-toast { background: #2f7fbc; }
 	.admin-dark .admin-image-toast[data-tone="error"] { background: #a8433f; }
 	.admin-media { display: grid; gap: 2rem; padding: 1.75rem clamp(1.25rem, 3vw, 2.5rem) 3rem; }
@@ -1848,9 +2035,17 @@ const iconPaths: Record<string, string> = {
 	.admin-markdown-toolbar button svg { width: 1rem; height: 1rem; }
 	.admin-toolbar-divider { width: 1px; height: 1.3rem; margin: 0 .25rem; background: #d5e0e6; }
 	.admin-emoji-wrap { position: relative; }
-	.admin-emoji-menu { position: absolute; z-index: 3; top: calc(100% + .45rem); left: 0; display: grid; grid-template-columns: repeat(5, 2rem); gap: .2rem; width: 11rem; padding: .45rem; border: 1px solid #dce8ee; border-radius: .7rem; background: #fff; box-shadow: 0 .7rem 1.6rem #54656d1c; }
+	.admin-emoji-menu { position: absolute; z-index: 3; top: calc(100% + .45rem); left: 0; display: block; width: 16.6rem; padding: .5rem; border: 1px solid #dce8ee; border-radius: .7rem; background: #fff; box-shadow: 0 .7rem 1.6rem #54656d1c; }
+	.admin-emoji-tabs { display: flex; gap: .25rem; margin-bottom: .45rem; }
+	.admin-emoji-tabs button { flex: 1 1 0; height: 1.5rem; padding: 0; border: 1px solid #dce8ee; border-radius: .45rem; color: #5b6b74; background: #f6f9fc; font-size: .68rem; }
+	.admin-emoji-tabs button.is-active { color: #fff; border-color: #2f7fbc; background: #2f7fbc; }
+	.admin-emoji-panel { display: grid; grid-template-columns: repeat(8, 1.8rem); gap: .16rem; max-height: 10.4rem; overflow-y: auto; }
+	.admin-emoji-panel[hidden] { display: none; }
+	/* 工具栏最右边的表情按钮，面板往左展开，别顶出编辑区 */
+	.admin-emoji-wrap .admin-emoji-menu { right: 0; left: auto; }
+	.admin-word-count { margin-left: auto; align-self: center; padding-right: .3rem; color: #8fa2ac; font-size: .72rem; white-space: nowrap; }
 	.admin-emoji-menu[hidden] { display: none; }
-	.admin-emoji-menu button { width: 1.9rem; height: 1.9rem; font-size: 1rem; }
+	.admin-emoji-menu button { width: 1.8rem; height: 1.8rem; font-size: .98rem; }
 	.admin-mood-field { position: relative; }
 	.admin-mood-input { display: flex; align-items: stretch; }
 	.admin-mood-input input { border-radius: .65rem 0 0 .65rem; }
@@ -1952,6 +2147,9 @@ const iconPaths: Record<string, string> = {
 	.admin-dark .admin-audio-upload { border-color: #40505a; background: #2d3941; }
 	.admin-dark .admin-audio-upload input[type="file"] { border-color: #4c5c65; color: #bbcad0; background: #26323a; }
 	.admin-dark .admin-emoji-menu { border-color: #4c5c65; background: #2d3941; }
+	.admin-dark .admin-emoji-tabs button { border-color: #4c5c65; color: #bbcad0; background: #2a3441; }
+	.admin-dark .admin-emoji-tabs button.is-active { color: #fff; border-color: #2f7fbc; background: #2f7fbc; }
+	.admin-dark .admin-word-count { color: #829198; }
 	.admin-dark .admin-mood-input button { border-color: #4c5c65; background: #2a3441; }
 	.admin-dark .admin-auth-panel h1, .admin-dark .admin-editor h2, .admin-dark .admin-side-intro h1, .admin-dark .admin-list-item-copy strong { color: #edf2f3; }
 	.admin-dark .admin-muted, .admin-dark .admin-side-intro p, .admin-dark .admin-auth-hint, .admin-dark .admin-form-footer, .admin-dark .admin-list-empty { color: #aab8bd; }
@@ -2011,4 +2209,16 @@ const iconPaths: Record<string, string> = {
 	.admin-dark .admin-field-hint { color: #8fa2ac; }
 	.admin-dark .admin-picker-thumb { background: #2f3c44; }
 	.admin-dark .admin-picker-name { color: #c3d2d9; }
+
+	/* 实时预览（CodeMirror 装饰式）：铺满整行，源码 textarea 让位 */
+	.admin-writing-split.is-live { grid-template-columns: minmax(0, 1fr); }
+	.admin-writing-split.is-live > .admin-body-input { display: none; }
+	.admin-live-host { display: block; min-width: 0; overflow: hidden; border: 1px solid #dce7eb; border-radius: .8rem; color: #2f3a41; background: #fff; }
+	.admin-live-host[hidden] { display: none; }
+	.admin-live-host .cm-editor { max-height: 46rem; }
+	.admin-live-host .cm-editor.cm-focused { outline: none; }
+	.admin-live-host .cm-scroller { max-height: 46rem; overflow-y: auto; }
+	.admin-dark .admin-live-host { border-color: #4c5c65; color: #dbe6ea; background: #222c33; }
+	/* 后台没有 --primary 变量，这里用固定主色，避免白字白底看不见 */
+	.admin-markdown-toolbar button[data-mode-toggle].is-active { color: #fff; background: #2f7fbc; border-color: #2f7fbc; }
 </style>
