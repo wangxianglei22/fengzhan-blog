@@ -288,6 +288,15 @@ if (!globalScope[navbarBoundKey]) {
 		window.setTimeout(bindSwupWhenReady, 300);
 	};
 	bindSwupWhenReady();
+	// 最后一道保险：不论哪种客户端切页方式，路径一变就重算（切页后 DOM 可能稍后才换完）
+	let lastNavPath = window.location.pathname;
+	window.setInterval(() => {
+		if (window.location.pathname === lastNavPath) return;
+		lastNavPath = window.location.pathname;
+		updateNavHighlight();
+		window.setTimeout(updateNavHighlight, 250);
+		window.setTimeout(updateNavHighlight, 800);
+	}, 400);
 	document.addEventListener("astro:page-load", () => {
 		bindSwupHighlight();
 		updateNavHighlight();
