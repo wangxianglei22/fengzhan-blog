@@ -275,6 +275,19 @@ if (!globalScope[navbarBoundKey]) {
 	bindSwupHighlight();
 	// 首次加载先算一次：此时 swup 可能还没就绪，不能只依赖它
 	updateNavHighlight();
+	// swup 初始化比这段脚本晚时，短轮询几次把它挂上就停
+	let swupBindTicks = 0;
+	const bindSwupWhenReady = () => {
+		bindSwupHighlight();
+		const bound = (window.swup as unknown as SwupLike | undefined)?.__navHighlightBound === true;
+		swupBindTicks += 1;
+		if (bound || swupBindTicks >= 20) {
+			updateNavHighlight();
+			return;
+		}
+		window.setTimeout(bindSwupWhenReady, 300);
+	};
+	bindSwupWhenReady();
 	document.addEventListener("astro:page-load", () => {
 		bindSwupHighlight();
 		updateNavHighlight();
